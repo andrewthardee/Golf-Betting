@@ -48,6 +48,7 @@ let state = loadState() || {
   roundStarted: false,
   currentHole: 1,
   startHole: 1,
+  holeIndex: 0,
   wolfOrder: [0, 1, 2, 3, 4],
   pendingWolf: null
 };
@@ -88,6 +89,7 @@ if (!state.playerRosterId) state.playerRosterId = [null, null, null, null, null]
 if (state.roundStarted === undefined) state.roundStarted = false;
 if (!state.currentHole) state.currentHole = 1;
 if (!state.startHole) state.startHole = 1;
+if (state.holeIndex === undefined) state.holeIndex = 0;
 if (!state.wolfOrder) state.wolfOrder = [0, 1, 2, 3, 4];
 if (state.pendingWolf === undefined) state.pendingWolf = null;
 
@@ -476,6 +478,7 @@ function renderHoleSetup() {
 document.getElementById('holeSetupContinueBtn').addEventListener('click', () => {
   state.currentHole = Number(document.getElementById('startHoleInput').value) || 1;
   state.startHole = state.currentHole;
+  state.holeIndex = 0;
   const sels = document.querySelectorAll('.wolfOrderSel');
   state.wolfOrder = Array.from(sels).map(el => Number(el.value));
   saveState();
@@ -491,7 +494,7 @@ function prepareTeeShotScreen() {
   const wolfSel = document.getElementById('wolfPlayer');
   wolfSel.innerHTML = state.players.map((p, i) => `<option value="${i}">${p}</option>`).join('');
 
-  const shift = ((hole - state.startHole) % NUM_PLAYERS + NUM_PLAYERS) % NUM_PLAYERS;
+  const shift = state.holeIndex % NUM_PLAYERS;
   const teeOrder = state.wolfOrder.slice(shift).concat(state.wolfOrder.slice(0, shift));
   const suggested = teeOrder[0];
   const existing = state.wolfHoles[hole];
@@ -870,29 +873,40 @@ document.getElementById('viewStandingsBtn').addEventListener('click', () => {
 
 function prepareStandings() {
   renderSummary('standingsSummary');
-  renderScoreTotals('standingsScores');
   renderMatchplay('standingsMatches');
+  renderScoreTotals('standingsScores');
+  const roundComplete = state.holeIndex >= 17;
+  document.getElementById('roundCompleteMsg').style.display = roundComplete ? 'block' : 'none';
+  document.getElementById('nextHoleBtn').style.display = roundComplete ? 'none' : 'block';
 }
 
 function renderScoreTotals(targetId) {
-  const holes = Object.keys(state.holes).map(Number).filter(holeHasScores).sort((a, b) => a - b);
-  const grossTotals = state.players.map(() => 0);
-  const netTotals = state.players.map(() => 0);
-  holes.forEach(h => {
-    state.players.forEach((_, i) => {
-      grossTotals[i] += Number(state.holes[h].scores[i]);
-      netTotals[i] += netScore(i, h, state.holes[h].scores[i]);
-    });
-  });
-  document.getElementById(targetId).innerHTML = holes.length ? `
-    <table class="totals-table">
-      <thead><tr><th></th>${state.players.map(p => `<th>${p}</th>`).join('')}</tr></thead>
-      <tbody>
-        <tr><td><b>Gross</b></td>${grossTotals.map(v => `<td>${v}</td>`).join('')}</tr>
-        <tr><td><b>Net</b></td>${netTotals.map(v => `<td>${v}</td>`).join('')}</tr>
-      </tbody>
-    </table>
-  ` : '<p class="hint">No holes recorded yet.</p>';
+  const frontHoles = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const backHoles = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+  const cellFor = (h, i) => {
+    const hd = state.holes[h];
+    return hd && hd.scores[i] !== undefined && hd.scores[i] !== '' ? hd.scores[i] : '';
+  };
+  const rowHtml = h => `<tr><td>${h}</td>${state.players.map((_, i) => `<td>${cellFor(h, i)}</td>`).join('')}</tr>`;
+  const sumFor = (holes, i) => holes.reduce((s, h) => s + Number(state.holes[h].scores[i]), 0);
+  const outComplete = frontHoles.every(holeHasScores);
+  const inComplete = backHoles.every(holeHasScores);
+  const totalRowHtml = (label, holes, complete) =>
+    `<tr><td><b>${label}</b></td>${state.players.map((_, i) => `<td><b>${complete ? sumFor(holes, i) : ''}</b></td>`).join('')}</tr>`;
+  document.getElementById(targetId).innerHTML = `
+    <div class="table-scroll">
+      <table class="totals-table sc-grid">
+        <thead><tr><th>Hole</th>${state.players.map(p => `<th>${p}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${frontHoles.map(rowHtml).join('')}
+          ${totalRowHtml('Out', frontHoles, outComplete)}
+          ${backHoles.map(rowHtml).join('')}
+          ${totalRowHtml('In', backHoles, inComplete)}
+          ${totalRowHtml('Total', frontHoles.concat(backHoles), outComplete && inComplete)}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 document.getElementById('standingsLink').addEventListener('click', () => {
@@ -901,7 +915,9 @@ document.getElementById('standingsLink').addEventListener('click', () => {
 });
 
 document.getElementById('nextHoleBtn').addEventListener('click', () => {
-  state.currentHole = (state.currentHole || 1) + 1;
+  if (state.holeIndex >= 17) return;
+  state.holeIndex += 1;
+  state.currentHole = ((state.startHole - 1 + state.holeIndex) % 18) + 1;
   state.pendingWolf = null;
   saveState();
   prepareTeeShotScreen();
@@ -1008,7 +1024,7 @@ document.getElementById('resetRound').addEventListener('click', () => {
   const courses = state.courses, activeCourseId = state.activeCourseId, bets = state.bets;
   state = {
     players: names, handicapIndex, playerTeeIdx, playerRosterId, roster, courses, activeCourseId, bets,
-    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, startHole: 1, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null
+    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, startHole: 1, holeIndex: 0, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null
   };
   saveState();
   document.getElementById('tabs').style.display = 'none';

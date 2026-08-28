@@ -214,7 +214,9 @@ button.danger { background: var(--danger); }
 }
 .match-card b { color: var(--green-dark); }
 
-.mp-grid th, .mp-grid td { text-align: center; }
-.mp-grid thead th:first-child { text-align: left; }
-.mp-grid tbody th { text-align: left; }
+.mp-grid, .sc-grid { table-layout: fixed; }
+.mp-grid th, .mp-grid td, .sc-grid th, .sc-grid td { text-align: center; width: 3rem; }
+.mp-grid thead th:first-child, .sc-grid thead th:first-child { text-align: left; width: 3.5rem; }
+.mp-grid tbody th { text-align: left; width: 3.5rem; }
+.sc-grid tbody td:first-child { text-align: left; font-weight: 600; }
 .mp-diag { background: var(--border); }
