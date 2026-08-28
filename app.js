@@ -124,8 +124,14 @@ function courseHandicap(playerIdx) {
 }
 
 /* ---------- Strokes ---------- */
+function lowestCourseHandicap() {
+  return Math.min(...state.players.map((_, i) => courseHandicap(i)));
+}
+function playingHandicap(playerIdx) {
+  return courseHandicap(playerIdx) - lowestCourseHandicap();
+}
 function strokesForPlayer(playerIdx, hole) {
-  const h = courseHandicap(playerIdx);
+  const h = playingHandicap(playerIdx);
   const si = activeCourse().holes[hole - 1].si;
   const base = Math.floor(h / 18);
   const extra = (si <= (h % 18)) ? 1 : 0;
@@ -331,7 +337,7 @@ function renderRosterTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" data-id="${r.id}" class="rosterName" value="${r.name}"></td>
-      <td><input type="number" data-id="${r.id}" class="rosterHcp" value="${r.handicapIndex}" min="-10" max="54" step="0.1"></td>
+      <td><input type="text" inputmode="decimal" data-id="${r.id}" class="rosterHcp" value="${r.handicapIndex}"></td>
       <td><button type="button" class="danger removeRoster" data-id="${r.id}">✕</button></td>
     `;
     body.appendChild(tr);
@@ -380,9 +386,9 @@ function renderPlayerTable() {
     tr.innerHTML = `
       <td><select data-idx="${i}" class="playerRosterSel">${rosterOptions}</select></td>
       <td><input type="text" data-idx="${i}" class="playerName" value="${name}"></td>
-      <td><input type="number" data-idx="${i}" class="playerHcp" value="${state.handicapIndex[i]}" min="-10" max="54" step="0.1"></td>
+      <td><input type="text" inputmode="decimal" data-idx="${i}" class="playerHcp" value="${state.handicapIndex[i]}"></td>
       <td><select data-idx="${i}" class="playerTeeSel">${course.tees.map((t, ti) => `<option value="${ti}">${t.name}</option>`).join('')}</select></td>
-      <td class="courseHcpCell">${courseHandicap(i)}</td>
+      <td class="courseHcpCell" data-idx="${i}">${playingHandicap(i)}</td>
     `;
     ptBody.appendChild(tr);
   });
@@ -414,15 +420,20 @@ function renderPlayerTable() {
     const rid = state.playerRosterId[idx];
     if (rid) rosterById(rid).handicapIndex = state.handicapIndex[idx];
     saveState();
-    renderPlayerTable();
+    updateCourseHcpCells();
   }));
   ptBody.querySelectorAll('.playerTeeSel').forEach(el => {
     el.value = state.playerTeeIdx[el.dataset.idx] || 0;
     el.addEventListener('change', e => {
       state.playerTeeIdx[e.target.dataset.idx] = Number(e.target.value) || 0;
       saveState();
-      renderPlayerTable();
+      updateCourseHcpCells();
     });
+  });
+}
+function updateCourseHcpCells() {
+  document.querySelectorAll('.courseHcpCell').forEach(el => {
+    el.textContent = playingHandicap(Number(el.dataset.idx));
   });
 }
 
