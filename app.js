@@ -642,7 +642,8 @@ function computeWolfHole(hole, data) {
   const birdieCount = state.players.reduce((count, _, i) => Number(scores[i]) <= par - 1 ? count + 1 : count, 0);
   const multiplier = Math.pow(2, hammers) * Math.pow(2, birdieCount);
 
-  const payouts = state.players.map(() => 0);
+  const wolfPayouts = state.players.map(() => 0);
+  const trashPayouts = state.players.map(() => 0);
   let tie = (aBest === bBest);
   let winners = [], losers = [];
 
@@ -652,36 +653,38 @@ function computeWolfHole(hole, data) {
     if (!tie) {
       if (aBest < bBest) { winners = teamA; losers = teamB; }
       else { winners = teamB; losers = teamA; }
-      teamA.forEach(i => { payouts[i] += (winners === teamA ? rateA : -rateA); });
-      teamB.forEach(i => { payouts[i] += (winners === teamB ? rateB : -rateB); });
+      teamA.forEach(i => { wolfPayouts[i] += (winners === teamA ? rateA : -rateA); });
+      teamB.forEach(i => { wolfPayouts[i] += (winners === teamB ? rateB : -rateB); });
     }
     for (let k = 0; k < trashA; k++) {
-      teamA.forEach(i => { payouts[i] += state.bets.trashSmall; });
-      teamB.forEach(i => { payouts[i] -= state.bets.trashBig; });
+      teamA.forEach(i => { trashPayouts[i] += state.bets.trashSmall; });
+      teamB.forEach(i => { trashPayouts[i] -= state.bets.trashBig; });
     }
     for (let k = 0; k < trashB; k++) {
-      teamB.forEach(i => { payouts[i] += state.bets.trashBig; });
-      teamA.forEach(i => { payouts[i] -= state.bets.trashSmall; });
+      teamB.forEach(i => { trashPayouts[i] += state.bets.trashBig; });
+      teamA.forEach(i => { trashPayouts[i] -= state.bets.trashSmall; });
     }
   } else {
     const rate = state.bets.bigStake * multiplier;
     if (!tie) {
       if (aBest < bBest) { winners = teamA; losers = teamB; }
       else { winners = teamB; losers = teamA; }
-      winners.forEach(w => { payouts[w] += rate * losers.length; });
-      losers.forEach(l => { payouts[l] -= rate * winners.length; });
+      winners.forEach(w => { wolfPayouts[w] += rate * losers.length; });
+      losers.forEach(l => { wolfPayouts[l] -= rate * winners.length; });
     }
     for (let k = 0; k < trashA; k++) {
-      teamA.forEach(w => { payouts[w] += state.bets.trashBig * teamB.length; });
-      teamB.forEach(l => { payouts[l] -= state.bets.trashBig; });
+      teamA.forEach(w => { trashPayouts[w] += state.bets.trashBig * teamB.length; });
+      teamB.forEach(l => { trashPayouts[l] -= state.bets.trashBig; });
     }
     for (let k = 0; k < trashB; k++) {
-      teamB.forEach(w => { payouts[w] += state.bets.trashBig; });
-      teamA.forEach(l => { payouts[l] -= state.bets.trashBig * teamB.length; });
+      teamB.forEach(w => { trashPayouts[w] += state.bets.trashBig; });
+      teamA.forEach(l => { trashPayouts[l] -= state.bets.trashBig * teamB.length; });
     }
   }
 
-  return { nets, teamA, teamB, aBest, bBest, tie, winners, losers, multiplier, payouts, birdieCount, isPartner };
+  const payouts = state.players.map((_, i) => wolfPayouts[i] + trashPayouts[i]);
+
+  return { nets, teamA, teamB, aBest, bBest, tie, winners, losers, multiplier, payouts, wolfPayouts, trashPayouts, birdieCount, isPartner };
 }
 
 function formatWolfHoleResult(hole, data) {
@@ -913,9 +916,17 @@ function renderFullData() {
   document.getElementById('wolfResults').innerHTML = wolfHoles.length
     ? wolfHoles.map(h => formatWolfHoleResult(h, state.wolfHoles[h])).join('')
     : '<p class="hint">No holes recorded yet.</p>';
-  const wolfSums = state.players.map(() => 0);
-  wolfHoles.forEach(h => { computeWolfHole(h, state.wolfHoles[h]).payouts.forEach((p, i) => wolfSums[i] += p); });
-  document.getElementById('wolfTotals').innerHTML = `<table class="totals-table">${state.players.map((p, i) => `<tr><td>${p}</td><td class="${wolfSums[i] >= 0 ? 'money-pos' : 'money-neg'}">${wolfSums[i] >= 0 ? '+' : ''}$${wolfSums[i].toFixed(2)}</td></tr>`).join('')}</table>`;
+  const wolfOnlySums = state.players.map(() => 0);
+  const trashSums = state.players.map(() => 0);
+  wolfHoles.forEach(h => {
+    const r = computeWolfHole(h, state.wolfHoles[h]);
+    r.wolfPayouts.forEach((p, i) => wolfOnlySums[i] += p);
+    r.trashPayouts.forEach((p, i) => trashSums[i] += p);
+  });
+  const fmt = v => `<td class="${v >= 0 ? 'money-pos' : 'money-neg'}">${v >= 0 ? '+' : ''}$${v.toFixed(2)}</td>`;
+  document.getElementById('wolfTotals').innerHTML = `<table class="totals-table"><thead><tr><th>Player</th><th>Wolf</th><th>Trash</th><th>Total</th></tr></thead><tbody>${
+    state.players.map((p, i) => `<tr><td>${p}</td>${fmt(wolfOnlySums[i])}${fmt(trashSums[i])}${fmt(wolfOnlySums[i] + trashSums[i])}</tr>`).join('')
+  }</tbody></table>`;
 
   const dayHoles = Object.keys(state.dayHoles).map(Number).filter(h => state.dayHoles[h].teamOf2 && holeHasScores(h)).sort((a, b) => a - b);
   document.getElementById('dayResults').innerHTML = dayHoles.length
