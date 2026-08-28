@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Fairway Stakes</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>⛳ Fairway Stakes</h1>
+  <nav id="tabs" class="tabs">
+    <button data-tab="setup" class="tab active">Setup</button>
+    <button data-tab="wolf" class="tab">Wolf</button>
+    <button data-tab="vegas" class="tab">Vegas</button>
+    <button data-tab="matchplay" class="tab">Match Play</button>
+    <button data-tab="summary" class="tab">Money</button>
+  </nav>
+</header>
+
+<main id="app">
+
+<!-- SETUP -->
+<section id="setup" class="panel active">
+  <h2>Round Setup</h2>
+
+  <div class="card">
+    <h3>Players &amp; Handicaps</h3>
+    <p class="hint">Enter each player's course handicap (strokes for the round). Strokes are allocated to holes by stroke index.</p>
+    <table class="input-table" id="playerTable">
+      <thead><tr><th>Player</th><th>Handicap</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Course — Par &amp; Stroke Index</h3>
+    <p class="hint">Stroke index 1 = hardest hole (gets strokes first). Standard 18-hole allocation.</p>
+    <div class="table-scroll">
+    <table class="input-table" id="courseTable">
+      <thead><tr><th>Hole</th><th>Par</th><th>Stroke Index</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Bet Amounts</h3>
+    <label>Wolf — base $ per point/hole <input type="number" id="wolfUnit" value="1" min="0" step="0.5"></label>
+    <label>Vegas — $ per point of differential <input type="number" id="vegasUnit" value="1" min="0" step="0.5"></label>
+    <label>Match Play — $ per hole won (per match) <input type="number" id="matchUnit" value="1" min="0" step="0.5"></label>
+  </div>
+
+  <div class="card">
+    <button id="resetRound" class="danger">Start New Round (clear all data)</button>
+  </div>
+</section>
+
+<!-- WOLF -->
+<section id="wolf" class="panel">
+  <h2>5-Man Wolf</h2>
+  <div class="card">
+    <h3>Play Hole</h3>
+    <label>Hole # <input type="number" id="wolfHole" min="1" max="18" value="1"></label>
+    <label>Wolf this hole <select id="wolfPlayer"></select></label>
+    <div class="hint" id="wolfOrderHint"></div>
+
+    <label>Mode
+      <select id="wolfMode">
+        <option value="partner">Pick a Partner</option>
+        <option value="lone">Lone Wolf (voluntary, before tee shots — pays/wins double)</option>
+        <option value="forced">Lone Wolf (forced — no one wanted to partner)</option>
+      </select>
+    </label>
+    <label id="wolfPartnerWrap">Partner <select id="wolfPartner"></select></label>
+    <label>Hammers accepted (each doubles the bet) <input type="number" id="wolfHammers" min="0" value="0"></label>
+    <p class="hint">A gross birdie (or better) by any player also doubles the bet, stacking with hammers.</p>
+
+    <h4>Gross Scores</h4>
+    <div id="wolfScores" class="score-grid"></div>
+
+    <button id="wolfSubmit">Record Hole</button>
+  </div>
+
+  <div class="card">
+    <h3>Hole Results</h3>
+    <div id="wolfResults"></div>
+  </div>
+
+  <div class="card">
+    <h3>Wolf Totals</h3>
+    <div id="wolfTotals"></div>
+  </div>
+</section>
+
+<!-- VEGAS -->
+<section id="vegas" class="panel">
+  <h2>Vegas</h2>
+  <div class="card">
+    <h3>Play Hole</h3>
+    <label>Hole # <input type="number" id="vegasHole" min="1" max="18" value="1"></label>
+    <button id="vegasRandomize">🎲 Randomize Teams (2 vs 3)</button>
+    <div id="vegasTeamsDisplay" class="hint"></div>
+    <p class="hint">A gross birdie by either team flips the opposing team's two-digit number (worse for them).</p>
+
+    <h4>Gross Scores</h4>
+    <div id="vegasScores" class="score-grid"></div>
+
+    <button id="vegasSubmit">Record Hole</button>
+  </div>
+
+  <div class="card">
+    <h3>Hole Results</h3>
+    <div id="vegasResults"></div>
+  </div>
+
+  <div class="card">
+    <h3>Vegas Totals</h3>
+    <div id="vegasTotals"></div>
+  </div>
+</section>
+
+<!-- MATCH PLAY -->
+<section id="matchplay" class="panel">
+  <h2>Round Robin Net Match Play</h2>
+  <div class="card">
+    <h3>Enter Gross Scores for a Hole</h3>
+    <label>Hole # <input type="number" id="mpHole" min="1" max="18" value="1"></label>
+    <div id="mpScores" class="score-grid"></div>
+    <button id="mpSubmit">Record Hole</button>
+    <p class="hint">Net scores (using each player's strokes for the hole) decide every 1-on-1 match automatically.</p>
+  </div>
+
+  <div class="card">
+    <h3>Match Statuses</h3>
+    <div id="mpMatches"></div>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section id="summary" class="panel">
+  <h2>Money Summary</h2>
+  <div class="card">
+    <div id="summaryTable"></div>
+  </div>
+</section>
+
+</main>
+<script src="app.js"></script>
+</body>
+</html>
