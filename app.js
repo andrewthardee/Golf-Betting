@@ -41,7 +41,7 @@ let state = loadState() || {
   roster: [],
   courses: [makeDefaultCourse()],
   activeCourseId: 'default',
-  bets: { smallStake: 15, bigStake: 10, matchUnit: 1 },
+  bets: { smallStake: 15, bigStake: 10, trashSmall: 5, trashBig: 5, daytonaPointValue: 1, matchUnit: 1 },
   holes: {},
   wolfHoles: {},
   dayHoles: {},
@@ -70,6 +70,9 @@ if (!state.courses.some(c => c.id === 'lakeside_championship')) {
 }
 if (!state.bets.smallStake) state.bets.smallStake = 15;
 if (!state.bets.bigStake) state.bets.bigStake = 10;
+if (state.bets.trashSmall === undefined) state.bets.trashSmall = 5;
+if (state.bets.trashBig === undefined) state.bets.trashBig = 5;
+if (state.bets.daytonaPointValue === undefined) state.bets.daytonaPointValue = 1;
 if (!state.holes) state.holes = {};
 if (!state.dayHoles) state.dayHoles = {};
 if (!state.roster) {
@@ -429,12 +432,18 @@ document.getElementById('playersContinueBtn').addEventListener('click', () => {
   showScreen('scrBets');
   document.getElementById('smallStake').value = state.bets.smallStake;
   document.getElementById('bigStake').value = state.bets.bigStake;
+  document.getElementById('trashSmall').value = state.bets.trashSmall;
+  document.getElementById('trashBig').value = state.bets.trashBig;
+  document.getElementById('daytonaPointValue').value = state.bets.daytonaPointValue;
   document.getElementById('matchUnit').value = state.bets.matchUnit;
 });
 
 /* ---------- STEP 3: Bets ---------- */
 document.getElementById('smallStake').addEventListener('input', e => { state.bets.smallStake = Number(e.target.value) || 0; saveState(); });
 document.getElementById('bigStake').addEventListener('input', e => { state.bets.bigStake = Number(e.target.value) || 0; saveState(); });
+document.getElementById('trashSmall').addEventListener('input', e => { state.bets.trashSmall = Number(e.target.value) || 0; saveState(); });
+document.getElementById('trashBig').addEventListener('input', e => { state.bets.trashBig = Number(e.target.value) || 0; saveState(); });
+document.getElementById('daytonaPointValue').addEventListener('input', e => { state.bets.daytonaPointValue = Number(e.target.value) || 0; saveState(); });
 document.getElementById('matchUnit').addEventListener('input', e => { state.bets.matchUnit = Number(e.target.value) || 0; saveState(); });
 
 document.getElementById('betsBackBtn').addEventListener('click', () => {
@@ -497,7 +506,6 @@ function prepareTeeShotScreen() {
 
   updateWolfPartnerOptions();
   document.getElementById('wolfMode').value = existing ? existing.mode : 'partner';
-  document.getElementById('wolfHammers').value = existing ? existing.hammers : 0;
   toggleWolfPartnerVisibility();
   if (existing && existing.partner !== null && existing.partner !== undefined) {
     document.getElementById('wolfPartner').value = existing.partner;
@@ -534,8 +542,7 @@ document.getElementById('teeShotContinueBtn').addEventListener('click', () => {
   const wolf = Number(document.getElementById('wolfPlayer').value);
   const mode = document.getElementById('wolfMode').value;
   const partner = mode === 'partner' ? Number(document.getElementById('wolfPartner').value) : null;
-  const hammers = Number(document.getElementById('wolfHammers').value) || 0;
-  state.pendingWolf = { wolf, mode, partner, hammers };
+  state.pendingWolf = { wolf, mode, partner };
   if (!state.dayHoles[hole] || !state.dayHoles[hole].teamOf2) {
     randomizeDaytonaForHole(hole);
   }
@@ -557,7 +564,7 @@ function prepareEnterScoresScreen() {
     ? `${state.players[pw.wolf]} & ${state.players[pw.partner]}`
     : `${state.players[pw.wolf]} (lone wolf)`;
   const oppNames = state.players.filter((_, i) => i !== pw.wolf && (!isPartner || i !== pw.partner)).join(', ');
-  document.getElementById('wolfTeamsRef').innerHTML = `<b>Wolf:</b> ${wolfTeamNames} vs ${oppNames}${pw.hammers ? ` — hammers: ${pw.hammers}` : ''}`;
+  document.getElementById('wolfTeamsRef').innerHTML = `<b>Wolf:</b> ${wolfTeamNames} vs ${oppNames}`;
 
   const day = state.dayHoles[hole];
   if (day) {
@@ -581,6 +588,7 @@ function prepareEnterScoresScreen() {
   `).join('');
 
   const existingWolfHole = state.wolfHoles[hole];
+  document.getElementById('wolfHammers').value = existingWolfHole ? (existingWolfHole.hammers || 0) : 0;
   document.getElementById('holeTrashA').value = existingWolfHole ? (existingWolfHole.trashA || 0) : 0;
   document.getElementById('holeTrashB').value = existingWolfHole ? (existingWolfHole.trashB || 0) : 0;
 
@@ -599,10 +607,11 @@ document.getElementById('submitHoleBtn').addEventListener('click', () => {
   if (missing) { alert('Enter gross scores for all 5 players.'); return; }
 
   state.holes[hole] = { scores };
-  const pw = state.pendingWolf || { wolf: 0, mode: 'partner', partner: 1, hammers: 0 };
+  const pw = state.pendingWolf || { wolf: 0, mode: 'partner', partner: 1 };
+  const hammers = Number(document.getElementById('wolfHammers').value) || 0;
   const trashA = Number(document.getElementById('holeTrashA').value) || 0;
   const trashB = Number(document.getElementById('holeTrashB').value) || 0;
-  state.wolfHoles[hole] = { wolf: pw.wolf, mode: pw.mode, partner: pw.partner, hammers: pw.hammers, trashA, trashB };
+  state.wolfHoles[hole] = { wolf: pw.wolf, mode: pw.mode, partner: pw.partner, hammers, trashA, trashB };
   saveState();
   prepareHoleSummary(hole);
   showScreen('scrHoleSummary');
@@ -646,12 +655,12 @@ function computeWolfHole(hole, data) {
       teamB.forEach(i => { payouts[i] += (winners === teamB ? rateB : -rateB); });
     }
     for (let k = 0; k < trashA; k++) {
-      teamA.forEach(i => { payouts[i] += state.bets.smallStake; });
-      teamB.forEach(i => { payouts[i] -= state.bets.bigStake; });
+      teamA.forEach(i => { payouts[i] += state.bets.trashSmall; });
+      teamB.forEach(i => { payouts[i] -= state.bets.trashBig; });
     }
     for (let k = 0; k < trashB; k++) {
-      teamB.forEach(i => { payouts[i] += state.bets.bigStake; });
-      teamA.forEach(i => { payouts[i] -= state.bets.smallStake; });
+      teamB.forEach(i => { payouts[i] += state.bets.trashBig; });
+      teamA.forEach(i => { payouts[i] -= state.bets.trashSmall; });
     }
   } else {
     const rate = state.bets.bigStake * multiplier;
@@ -662,12 +671,12 @@ function computeWolfHole(hole, data) {
       losers.forEach(l => { payouts[l] -= rate * winners.length; });
     }
     for (let k = 0; k < trashA; k++) {
-      teamA.forEach(w => { payouts[w] += state.bets.bigStake * teamB.length; });
-      teamB.forEach(l => { payouts[l] -= state.bets.bigStake; });
+      teamA.forEach(w => { payouts[w] += state.bets.trashBig * teamB.length; });
+      teamB.forEach(l => { payouts[l] -= state.bets.trashBig; });
     }
     for (let k = 0; k < trashB; k++) {
-      teamB.forEach(w => { payouts[w] += state.bets.bigStake; });
-      teamA.forEach(l => { payouts[l] -= state.bets.bigStake * teamB.length; });
+      teamB.forEach(w => { payouts[w] += state.bets.trashBig; });
+      teamA.forEach(l => { payouts[l] -= state.bets.trashBig * teamB.length; });
     }
   }
 
@@ -715,20 +724,18 @@ function computeDaytonaHole(hole, data) {
   if (teamABirdied) { numB = teamBnets[1] * 10 + teamBnets[0]; flippedB = true; }
 
   const diff = Math.abs(numA - numB);
-  let rate, money;
+  const rate = state.bets.daytonaPointValue;
   const payouts = state.players.map(() => 0);
+  let money = 0;
+  // Each losing player pays the full point differential individually; winners split that pot evenly.
   if (numA < numB) {
-    rate = state.bets.smallStake;
-    money = diff * rate;
+    money = diff * rate * data.teamOf3.length;
+    data.teamOf3.forEach(i => payouts[i] -= diff * rate);
     data.teamOf2.forEach(i => payouts[i] += money / data.teamOf2.length);
-    data.teamOf3.forEach(i => payouts[i] -= money / data.teamOf3.length);
   } else if (numB < numA) {
-    rate = state.bets.bigStake;
-    money = diff * rate;
+    money = diff * rate * data.teamOf2.length;
+    data.teamOf2.forEach(i => payouts[i] -= diff * rate);
     data.teamOf3.forEach(i => payouts[i] += money / data.teamOf3.length);
-    data.teamOf2.forEach(i => payouts[i] -= money / data.teamOf2.length);
-  } else {
-    rate = 0; money = 0;
   }
 
   return { nets, numA, numB, diff, rate, money, payouts, teamABirdied, teamBBirdied, flippedA, flippedB };

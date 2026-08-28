@@ -114,12 +114,32 @@
 <!-- ============ STEP 3: BETS ============ -->
 <section id="scrBets" class="screen">
   <h2>Step 3 of 3 — Bet Amounts</h2>
+
   <div class="card">
-    <p class="hint">Wolf &amp; Daytona both use these per-man stakes: the smaller team (2 players) plays at the small stake, the larger team (3 players, and lone-wolf holes) plays at the big stake. Gross birdies and hammers double the hole's Wolf bet. Trash pays flat at each team's own stake.</p>
-    <label>Small team stake ($/man, e.g. team of 2) <input type="number" id="smallStake" value="15" min="0" step="1"></label>
-    <label>Big team stake ($/man, e.g. team of 3, or lone-wolf holes) <input type="number" id="bigStake" value="10" min="0" step="1"></label>
-    <label>Match Play — $ per hole won (per match) <input type="number" id="matchUnit" value="1" min="0" step="0.5"></label>
+    <h3>Wolf Denominations</h3>
+    <p class="hint">Per-man stakes: the smaller team (2 players, wolf + partner) plays at the small stake, the larger team (3 players, or all 4 opponents on a lone-wolf hole) plays at the big stake. Gross birdies and hammers double the hole's bet.</p>
+    <label>Small team stake ($/man) <input type="number" id="smallStake" value="15" min="0" step="1"></label>
+    <label>Big team stake ($/man) <input type="number" id="bigStake" value="10" min="0" step="1"></label>
   </div>
+
+  <div class="card">
+    <h3>Trash Denominations</h3>
+    <p class="hint">Flat, per trash won — separate from the Wolf hole stakes above, and not doubled by hammers or birdies.</p>
+    <label>Small team trash ($) <input type="number" id="trashSmall" value="5" min="0" step="1"></label>
+    <label>Big team trash ($) <input type="number" id="trashBig" value="5" min="0" step="1"></label>
+  </div>
+
+  <div class="card">
+    <h3>Daytona Denominations</h3>
+    <p class="hint">$ per point of differential. Each player on the losing team pays the full point differential individually; the winning team splits that pot evenly.</p>
+    <label>$ per point <input type="number" id="daytonaPointValue" value="1" min="0" step="0.5"></label>
+  </div>
+
+  <div class="card">
+    <h3>Match Play Denominations</h3>
+    <label>$ per hole won (per match) <input type="number" id="matchUnit" value="1" min="0" step="0.5"></label>
+  </div>
+
   <div style="display:flex; gap:0.5rem;">
     <button id="betsBackBtn" class="secondary-btn">← Back</button>
     <button id="beginRoundBtn" class="primary-btn">Begin Round 🏌️</button>
@@ -152,8 +172,6 @@
       </select>
     </label>
     <label id="wolfPartnerWrap">Partner <select id="wolfPartner"></select></label>
-    <label>Hammers accepted (each doubles the bet) <input type="number" id="wolfHammers" min="0" value="0"></label>
-    <p class="hint">A gross birdie (or better) by any player also doubles the Wolf bet, stacking with hammers.</p>
   </div>
   <button id="teeShotContinueBtn" class="primary-btn">Continue to Scores →</button>
 </section>
@@ -172,6 +190,12 @@
     <h3>Gross Scores</h3>
     <div id="holeParHint" class="hint"></div>
     <div id="holeScores" class="score-grid"></div>
+  </div>
+
+  <div class="card">
+    <h3>Wolf Extras</h3>
+    <label>Hammers accepted (each doubles the Wolf bet) <input type="number" id="wolfHammers" min="0" value="0"></label>
+    <p class="hint">A gross birdie (or better) by any player also doubles the Wolf bet, stacking with hammers.</p>
   </div>
 
   <div class="card">
