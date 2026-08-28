@@ -921,7 +921,7 @@ function switchTab(tabId) {
 }
 function renderFullData() {
   document.getElementById('setupCourseName').textContent = `Course: ${activeCourse().name}`;
-  document.getElementById('setupBetSummary').textContent = `Small team $${state.bets.smallStake}/man, Big team $${state.bets.bigStake}/man, Match Play $${state.bets.matchUnit}/hole`;
+  document.getElementById('setupBetSummary').textContent = `Wolf: $${state.bets.smallStake}/$${state.bets.bigStake} (small/big team). Trash: $${state.bets.trashSmall}/$${state.bets.trashBig}. Daytona: $${state.bets.daytonaPointValue}/pt. Match Play: $${state.bets.matchUnit}/hole.`;
 
   renderScorecardInputs();
   renderScorecardSummary();
