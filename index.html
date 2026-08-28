@@ -26,23 +26,44 @@
   <h2>Round Setup</h2>
 
   <div class="card">
-    <h3>Players &amp; Handicaps</h3>
-    <p class="hint">Enter each player's course handicap (strokes for the round). Strokes are allocated to holes by stroke index.</p>
-    <table class="input-table" id="playerTable">
-      <thead><tr><th>Player</th><th>Handicap</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
+    <h3>Course Library</h3>
+    <p class="hint">Set up each course once (par &amp; stroke index per hole, plus rating/slope per tee) and reuse it for future rounds.</p>
+    <label>Course being played
+      <select id="courseSelect"></select>
+    </label>
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+      <button id="newCourseBtn" type="button">+ New Course</button>
+      <button id="renameCourseBtn" type="button">Rename</button>
+      <button id="deleteCourseBtn" type="button" class="danger">Delete Course</button>
+    </div>
 
-  <div class="card">
-    <h3>Course — Par &amp; Stroke Index</h3>
-    <p class="hint">Stroke index 1 = hardest hole (gets strokes first). Standard 18-hole allocation.</p>
+    <h4>Holes — Par &amp; Stroke Index</h4>
+    <p class="hint">Stroke index 1 = hardest hole (gets strokes first). This is what determines birdies and stroke allocation.</p>
     <div class="table-scroll">
     <table class="input-table" id="courseTable">
       <thead><tr><th>Hole</th><th>Par</th><th>Stroke Index</th></tr></thead>
       <tbody></tbody>
     </table>
     </div>
+
+    <h4>Tees</h4>
+    <p class="hint">Rating &amp; Slope are on the scorecard/GHIN course info for each tee box.</p>
+    <div class="table-scroll">
+    <table class="input-table" id="teeTable">
+      <thead><tr><th>Tee</th><th>Rating</th><th>Slope</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+    <button id="addTeeBtn" type="button">+ Add Tee</button>
+  </div>
+
+  <div class="card">
+    <h3>Players, Tees &amp; Handicaps</h3>
+    <p class="hint">Enter each player's Handicap Index (from GHIN) and the tee they're playing. Course Handicap is computed the same way GHIN does: Round(Handicap Index × Slope/113 + (Rating − Par)).</p>
+    <table class="input-table" id="playerTable">
+      <thead><tr><th>Player</th><th>Handicap Index</th><th>Tee</th><th>Course Hcp</th></tr></thead>
+      <tbody></tbody>
+    </table>
   </div>
 
   <div class="card">

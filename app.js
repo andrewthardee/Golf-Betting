@@ -2,17 +2,38 @@
 const NUM_PLAYERS = 5;
 const STORAGE_KEY = 'fairwayStakesRound';
 
-const defaultCourse = Array.from({length: 18}, (_, i) => ({ par: 4, si: i + 1 }));
+function makeDefaultCourse() {
+  return {
+    id: 'default',
+    name: 'Default Course',
+    holes: Array.from({length: 18}, (_, i) => ({ par: 4, si: i + 1 })),
+    tees: [{ name: 'White', rating: 72.0, slope: 113 }]
+  };
+}
 
 let state = loadState() || {
   players: ['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Player 5'],
-  handicaps: [0, 0, 0, 0, 0],
-  course: defaultCourse,
+  handicapIndex: [0, 0, 0, 0, 0],
+  playerTeeIdx: [0, 0, 0, 0, 0],
+  courses: [makeDefaultCourse()],
+  activeCourseId: 'default',
   bets: { smallStake: 15, bigStake: 10, matchUnit: 1 },
   holes: {},       // shared gross scores: { [hole]: { scores: {0..4: gross} } }
   wolfHoles: {},    // { [hole]: { wolf, mode, partner, hammers, trashA, trashB } }
   dayHoles: {}      // { [hole]: { teamOf2, teamOf3 } }
 };
+
+// Migrate older saved rounds (single manual course, raw course handicaps).
+if (!state.courses) {
+  const migrated = makeDefaultCourse();
+  if (state.course) migrated.holes = state.course;
+  state.courses = [migrated];
+  state.activeCourseId = 'default';
+}
+if (!state.handicapIndex) {
+  state.handicapIndex = state.handicaps ? state.handicaps.slice() : [0, 0, 0, 0, 0];
+}
+if (!state.playerTeeIdx) state.playerTeeIdx = [0, 0, 0, 0, 0];
 if (!state.bets.smallStake) state.bets.smallStake = 15;
 if (!state.bets.bigStake) state.bets.bigStake = 10;
 if (!state.holes) state.holes = {};
@@ -28,10 +49,31 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+/* ---------- Course / Handicap (GHIN-style) ---------- */
+function activeCourse() {
+  return state.courses.find(c => c.id === state.activeCourseId) || state.courses[0];
+}
+function coursePar() {
+  return activeCourse().holes.reduce((sum, h) => sum + (Number(h.par) || 0), 0);
+}
+function activeTee(playerIdx) {
+  const course = activeCourse();
+  const idx = state.playerTeeIdx[playerIdx] || 0;
+  return course.tees[idx] || course.tees[0] || { rating: coursePar(), slope: 113 };
+}
+// Course Handicap = Round(Handicap Index x (Slope/113) + (Course Rating - Par)) — same formula GHIN uses.
+function courseHandicap(playerIdx) {
+  const hi = Number(state.handicapIndex[playerIdx]) || 0;
+  const tee = activeTee(playerIdx);
+  const slope = Number(tee.slope) || 113;
+  const rating = tee.rating !== undefined && tee.rating !== null && tee.rating !== '' ? Number(tee.rating) : coursePar();
+  return Math.round(hi * (slope / 113) + (rating - coursePar()));
+}
+
 /* ---------- Strokes ---------- */
 function strokesForPlayer(playerIdx, hole) {
-  const h = Number(state.handicaps[playerIdx]) || 0;
-  const si = state.course[hole - 1].si;
+  const h = courseHandicap(playerIdx);
+  const si = activeCourse().holes[hole - 1].si;
   const base = Math.floor(h / 18);
   const extra = (si <= (h % 18)) ? 1 : 0;
   return base + extra;
@@ -59,28 +101,62 @@ document.getElementById('tabs').addEventListener('click', (e) => {
 
 /* ---------- Setup rendering ---------- */
 function renderSetup() {
-  const ptBody = document.querySelector('#playerTable tbody');
-  ptBody.innerHTML = '';
-  state.players.forEach((name, i) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input type="text" data-idx="${i}" class="playerName" value="${name}"></td>
-      <td><input type="number" data-idx="${i}" class="playerHcp" value="${state.handicaps[i]}" min="0" max="54"></td>
-    `;
-    ptBody.appendChild(tr);
-  });
-  ptBody.querySelectorAll('.playerName').forEach(el => el.addEventListener('input', e => {
-    state.players[e.target.dataset.idx] = e.target.value || `Player ${Number(e.target.dataset.idx)+1}`;
-    saveState(); renderAll();
-  }));
-  ptBody.querySelectorAll('.playerHcp').forEach(el => el.addEventListener('input', e => {
-    state.handicaps[e.target.dataset.idx] = Number(e.target.value) || 0;
-    saveState();
-  }));
+  renderCourseSelect();
+  renderCourseHoleTable();
+  renderTeeTable();
+  renderPlayerTable();
 
+  document.getElementById('smallStake').value = state.bets.smallStake;
+  document.getElementById('bigStake').value = state.bets.bigStake;
+  document.getElementById('matchUnit').value = state.bets.matchUnit;
+}
+
+function renderCourseSelect() {
+  const sel = document.getElementById('courseSelect');
+  sel.innerHTML = state.courses.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  sel.value = state.activeCourseId;
+}
+document.getElementById('courseSelect').addEventListener('change', e => {
+  state.activeCourseId = e.target.value;
+  state.playerTeeIdx = state.playerTeeIdx.map(() => 0);
+  saveState();
+  renderSetup();
+});
+document.getElementById('newCourseBtn').addEventListener('click', () => {
+  const name = prompt('New course name:', 'New Course');
+  if (!name) return;
+  const id = 'course_' + Date.now();
+  state.courses.push({
+    id, name,
+    holes: Array.from({length: 18}, (_, i) => ({ par: 4, si: i + 1 })),
+    tees: [{ name: 'White', rating: 72.0, slope: 113 }]
+  });
+  state.activeCourseId = id;
+  saveState();
+  renderSetup();
+});
+document.getElementById('renameCourseBtn').addEventListener('click', () => {
+  const course = activeCourse();
+  const name = prompt('Rename course:', course.name);
+  if (!name) return;
+  course.name = name;
+  saveState();
+  renderSetup();
+});
+document.getElementById('deleteCourseBtn').addEventListener('click', () => {
+  if (state.courses.length <= 1) { alert('You need at least one course.'); return; }
+  if (!confirm(`Delete "${activeCourse().name}"?`)) return;
+  state.courses = state.courses.filter(c => c.id !== state.activeCourseId);
+  state.activeCourseId = state.courses[0].id;
+  saveState();
+  renderSetup();
+});
+
+function renderCourseHoleTable() {
+  const course = activeCourse();
   const ctBody = document.querySelector('#courseTable tbody');
   ctBody.innerHTML = '';
-  state.course.forEach((h, i) => {
+  course.holes.forEach((h, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${i + 1}</td>
@@ -90,26 +166,101 @@ function renderSetup() {
     ctBody.appendChild(tr);
   });
   ctBody.querySelectorAll('.holePar').forEach(el => el.addEventListener('input', e => {
-    state.course[e.target.dataset.idx].par = Number(e.target.value) || 4;
+    course.holes[e.target.dataset.idx].par = Number(e.target.value) || 4;
     saveState();
+    renderPlayerTable();
   }));
   ctBody.querySelectorAll('.holeSi').forEach(el => el.addEventListener('input', e => {
-    state.course[e.target.dataset.idx].si = Number(e.target.value) || 1;
+    course.holes[e.target.dataset.idx].si = Number(e.target.value) || 1;
     saveState();
   }));
-
-  document.getElementById('smallStake').value = state.bets.smallStake;
-  document.getElementById('bigStake').value = state.bets.bigStake;
-  document.getElementById('matchUnit').value = state.bets.matchUnit;
 }
+
+function renderTeeTable() {
+  const course = activeCourse();
+  const ttBody = document.querySelector('#teeTable tbody');
+  ttBody.innerHTML = '';
+  course.tees.forEach((t, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" data-idx="${i}" class="teeName" value="${t.name}"></td>
+      <td><input type="number" data-idx="${i}" class="teeRating" value="${t.rating}" min="50" max="90" step="0.1"></td>
+      <td><input type="number" data-idx="${i}" class="teeSlope" value="${t.slope}" min="55" max="155" step="1"></td>
+      <td>${course.tees.length > 1 ? `<button type="button" class="danger removeTee" data-idx="${i}">✕</button>` : ''}</td>
+    `;
+    ttBody.appendChild(tr);
+  });
+  ttBody.querySelectorAll('.teeName').forEach(el => el.addEventListener('input', e => {
+    course.tees[e.target.dataset.idx].name = e.target.value || 'Tee';
+    saveState();
+    renderPlayerTable();
+  }));
+  ttBody.querySelectorAll('.teeRating').forEach(el => el.addEventListener('input', e => {
+    course.tees[e.target.dataset.idx].rating = Number(e.target.value) || 0;
+    saveState();
+    renderPlayerTable();
+  }));
+  ttBody.querySelectorAll('.teeSlope').forEach(el => el.addEventListener('input', e => {
+    course.tees[e.target.dataset.idx].slope = Number(e.target.value) || 113;
+    saveState();
+    renderPlayerTable();
+  }));
+  ttBody.querySelectorAll('.removeTee').forEach(el => el.addEventListener('click', e => {
+    if (course.tees.length <= 1) return;
+    course.tees.splice(Number(e.target.dataset.idx), 1);
+    state.playerTeeIdx = state.playerTeeIdx.map(idx => Math.min(idx, course.tees.length - 1));
+    saveState();
+    renderSetup();
+  }));
+}
+document.getElementById('addTeeBtn').addEventListener('click', () => {
+  activeCourse().tees.push({ name: 'New Tee', rating: 72.0, slope: 113 });
+  saveState();
+  renderSetup();
+});
+
+function renderPlayerTable() {
+  const course = activeCourse();
+  const ptBody = document.querySelector('#playerTable tbody');
+  ptBody.innerHTML = '';
+  state.players.forEach((name, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" data-idx="${i}" class="playerName" value="${name}"></td>
+      <td><input type="number" data-idx="${i}" class="playerHcp" value="${state.handicapIndex[i]}" min="-10" max="54" step="0.1"></td>
+      <td><select data-idx="${i}" class="playerTeeSel">${course.tees.map((t, ti) => `<option value="${ti}">${t.name}</option>`).join('')}</select></td>
+      <td class="courseHcpCell">${courseHandicap(i)}</td>
+    `;
+    ptBody.appendChild(tr);
+  });
+  ptBody.querySelectorAll('.playerName').forEach(el => el.addEventListener('input', e => {
+    state.players[e.target.dataset.idx] = e.target.value || `Player ${Number(e.target.dataset.idx)+1}`;
+    saveState(); renderAll();
+  }));
+  ptBody.querySelectorAll('.playerHcp').forEach(el => el.addEventListener('input', e => {
+    state.handicapIndex[e.target.dataset.idx] = Number(e.target.value) || 0;
+    saveState();
+    renderPlayerTable();
+  }));
+  ptBody.querySelectorAll('.playerTeeSel').forEach(el => {
+    el.value = state.playerTeeIdx[el.dataset.idx] || 0;
+    el.addEventListener('change', e => {
+      state.playerTeeIdx[e.target.dataset.idx] = Number(e.target.value) || 0;
+      saveState();
+      renderPlayerTable();
+    });
+  });
+}
+
 document.getElementById('smallStake').addEventListener('input', e => { state.bets.smallStake = Number(e.target.value) || 0; saveState(); });
 document.getElementById('bigStake').addEventListener('input', e => { state.bets.bigStake = Number(e.target.value) || 0; saveState(); });
 document.getElementById('matchUnit').addEventListener('input', e => { state.bets.matchUnit = Number(e.target.value) || 0; saveState(); });
 
 document.getElementById('resetRound').addEventListener('click', () => {
-  if (!confirm('This clears all scores, teams, and results for the round. Continue?')) return;
-  const names = state.players, hcps = state.handicaps, course = state.course, bets = state.bets;
-  state = { players: names, handicaps: hcps, course, bets, holes: {}, wolfHoles: {}, dayHoles: {} };
+  if (!confirm('This clears all scores, teams, and results for the round (course library and players stay). Continue?')) return;
+  const names = state.players, handicapIndex = state.handicapIndex, playerTeeIdx = state.playerTeeIdx;
+  const courses = state.courses, activeCourseId = state.activeCourseId, bets = state.bets;
+  state = { players: names, handicapIndex, playerTeeIdx, courses, activeCourseId, bets, holes: {}, wolfHoles: {}, dayHoles: {} };
   saveState();
   renderAll();
 });
@@ -118,7 +269,7 @@ document.getElementById('resetRound').addEventListener('click', () => {
 function renderScorecardInputs() {
   const hole = Number(document.getElementById('scHole').value) || 1;
   const existing = state.holes[hole];
-  document.getElementById('scPar').textContent = `Par ${state.course[hole - 1].par}, Stroke Index ${state.course[hole - 1].si}`;
+  document.getElementById('scPar').textContent = `Par ${activeCourse().holes[hole - 1].par}, Stroke Index ${activeCourse().holes[hole - 1].si}`;
   const grid = document.getElementById('scScores');
   grid.innerHTML = state.players.map((p, i) => `
     <div>
@@ -228,7 +379,7 @@ function computeWolfHole(hole, data) {
   const { wolf, mode, partner, hammers, trashA, trashB } = data;
   const scores = state.holes[hole].scores;
   const nets = state.players.map((_, i) => netScore(i, hole, scores[i]));
-  const par = state.course[hole - 1].par;
+  const par = activeCourse().holes[hole - 1].par;
 
   let teamA, teamB, isPartner;
   if (mode === 'partner') {
@@ -370,7 +521,7 @@ document.getElementById('dayCompute').addEventListener('click', () => {
 function computeDaytonaHole(hole, data) {
   const scores = state.holes[hole].scores;
   const nets = state.players.map((_, i) => netScore(i, hole, scores[i]));
-  const par = state.course[hole - 1].par;
+  const par = activeCourse().holes[hole - 1].par;
   const isBirdie = i => Number(scores[i]) <= par - 1;
 
   const [a1, a2] = data.teamOf2;
