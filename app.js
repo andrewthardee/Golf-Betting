@@ -11,6 +11,18 @@ function makeDefaultCourse() {
   };
 }
 
+function makeLakesideCourse() {
+  const pars = [4, 4, 5, 3, 4, 4, 4, 3, 5, 4, 3, 5, 4, 4, 4, 3, 5, 4];
+  const sis  = [11, 7, 3, 17, 1, 13, 5, 15, 9, 4, 16, 8, 2, 14, 6, 18, 12, 10];
+  return {
+    id: 'lakeside_green',
+    name: 'Lakeside (Green Tees)',
+    holes: pars.map((par, i) => ({ par, si: sis[i] })),
+    // Rating/slope weren't on the scorecard photo — update these from the actual tee marker.
+    tees: [{ name: 'Green', rating: 72.0, slope: 113 }]
+  };
+}
+
 let state = loadState() || {
   players: ['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Player 5'],
   handicapIndex: [0, 0, 0, 0, 0],
@@ -36,6 +48,9 @@ if (!state.handicapIndex) {
   state.handicapIndex = state.handicaps ? state.handicaps.slice() : [0, 0, 0, 0, 0];
 }
 if (!state.playerTeeIdx) state.playerTeeIdx = [0, 0, 0, 0, 0];
+if (!state.courses.some(c => c.id === 'lakeside_green')) {
+  state.courses.push(makeLakesideCourse());
+}
 if (!state.bets.smallStake) state.bets.smallStake = 15;
 if (!state.bets.bigStake) state.bets.bigStake = 10;
 if (!state.holes) state.holes = {};
