@@ -41,12 +41,13 @@ let state = loadState() || {
   roster: [],
   courses: [makeDefaultCourse()],
   activeCourseId: 'default',
-  bets: { smallStake: 15, bigStake: 10, trashSmall: 5, trashBig: 5, daytonaPointValue: 1, matchUnit: 1 },
+  bets: { smallStake: 15, bigStake: 10, trashSmall: 5, trashBig: 5, daytonaPointValue: 1 },
   holes: {},
   wolfHoles: {},
   dayHoles: {},
   roundStarted: false,
   currentHole: 1,
+  startHole: 1,
   wolfOrder: [0, 1, 2, 3, 4],
   pendingWolf: null
 };
@@ -86,6 +87,7 @@ if (!state.roster) {
 if (!state.playerRosterId) state.playerRosterId = [null, null, null, null, null];
 if (state.roundStarted === undefined) state.roundStarted = false;
 if (!state.currentHole) state.currentHole = 1;
+if (!state.startHole) state.startHole = 1;
 if (!state.wolfOrder) state.wolfOrder = [0, 1, 2, 3, 4];
 if (state.pendingWolf === undefined) state.pendingWolf = null;
 
@@ -435,7 +437,6 @@ document.getElementById('playersContinueBtn').addEventListener('click', () => {
   document.getElementById('trashSmall').value = state.bets.trashSmall;
   document.getElementById('trashBig').value = state.bets.trashBig;
   document.getElementById('daytonaPointValue').value = state.bets.daytonaPointValue;
-  document.getElementById('matchUnit').value = state.bets.matchUnit;
 });
 
 /* ---------- STEP 3: Bets ---------- */
@@ -444,7 +445,6 @@ document.getElementById('bigStake').addEventListener('input', e => { state.bets.
 document.getElementById('trashSmall').addEventListener('input', e => { state.bets.trashSmall = Number(e.target.value) || 0; saveState(); });
 document.getElementById('trashBig').addEventListener('input', e => { state.bets.trashBig = Number(e.target.value) || 0; saveState(); });
 document.getElementById('daytonaPointValue').addEventListener('input', e => { state.bets.daytonaPointValue = Number(e.target.value) || 0; saveState(); });
-document.getElementById('matchUnit').addEventListener('input', e => { state.bets.matchUnit = Number(e.target.value) || 0; saveState(); });
 
 document.getElementById('betsBackBtn').addEventListener('click', () => {
   showScreen('scrPlayers');
@@ -481,6 +481,7 @@ function renderHoleSetup() {
 }
 document.getElementById('holeSetupContinueBtn').addEventListener('click', () => {
   state.currentHole = Number(document.getElementById('startHoleInput').value) || 1;
+  state.startHole = state.currentHole;
   const sels = document.querySelectorAll('.wolfOrderSel');
   state.wolfOrder = Array.from(sels).map(el => Number(el.value));
   saveState();
@@ -496,7 +497,7 @@ function prepareTeeShotScreen() {
   const wolfSel = document.getElementById('wolfPlayer');
   wolfSel.innerHTML = state.players.map((p, i) => `<option value="${i}">${p}</option>`).join('');
 
-  const shift = (hole - 1) % NUM_PLAYERS;
+  const shift = ((hole - state.startHole) % NUM_PLAYERS + NUM_PLAYERS) % NUM_PLAYERS;
   const teeOrder = state.wolfOrder.slice(shift).concat(state.wolfOrder.slice(0, shift));
   const suggested = teeOrder[0];
   const existing = state.wolfHoles[hole];
@@ -782,18 +783,6 @@ function computeMatchStatuses() {
   });
   return status;
 }
-function matchplayPayouts() {
-  const status = computeMatchStatuses();
-  const pairs = allPairs();
-  const sums = state.players.map(() => 0);
-  pairs.forEach(([i, j]) => {
-    const s = status[`${i}-${j}`];
-    const money = s.diff * state.bets.matchUnit;
-    sums[i] += money;
-    sums[j] -= money;
-  });
-  return sums;
-}
 function holeMatchResults(hole) {
   const pairs = allPairs();
   const data = state.holes[hole];
@@ -816,11 +805,7 @@ function renderMatchplay(targetId) {
     if (s.diff === 0) statusText = 'All Square';
     else if (s.diff > 0) statusText = `${nameA} ${s.diff} up`;
     else statusText = `${nameB} ${-s.diff} up`;
-    const money = s.diff * state.bets.matchUnit;
-    const moneyText = money === 0 ? '' : (money > 0
-      ? ` — ${nameB} owes ${nameA} $${Math.abs(money).toFixed(2)}`
-      : ` — ${nameA} owes ${nameB} $${Math.abs(money).toFixed(2)}`);
-    return `<div class="match-card"><b>${nameA} vs ${nameB}</b>: ${statusText} through ${s.holesPlayed} hole(s)${moneyText}</div>`;
+    return `<div class="match-card"><b>${nameA} vs ${nameB}</b>: ${statusText} through ${s.holesPlayed} hole(s)</div>`;
   }).join('');
 }
 
@@ -838,22 +823,20 @@ function renderSummary(targetId) {
     r.payouts.forEach((p, i) => daySums[i] += p);
   });
 
-  const mpSums = matchplayPayouts();
-  const totalSums = state.players.map((_, i) => wolfSums[i] + daySums[i] + mpSums[i]);
+  const totalSums = state.players.map((_, i) => wolfSums[i] + daySums[i]);
 
   const rows = state.players.map((p, i) => `
     <tr>
       <td>${p}</td>
       <td class="${wolfSums[i] >= 0 ? 'money-pos' : 'money-neg'}">${wolfSums[i] >= 0 ? '+' : ''}$${wolfSums[i].toFixed(2)}</td>
       <td class="${daySums[i] >= 0 ? 'money-pos' : 'money-neg'}">${daySums[i] >= 0 ? '+' : ''}$${daySums[i].toFixed(2)}</td>
-      <td class="${mpSums[i] >= 0 ? 'money-pos' : 'money-neg'}">${mpSums[i] >= 0 ? '+' : ''}$${mpSums[i].toFixed(2)}</td>
       <td class="${totalSums[i] >= 0 ? 'money-pos' : 'money-neg'}"><b>${totalSums[i] >= 0 ? '+' : ''}$${totalSums[i].toFixed(2)}</b></td>
     </tr>
   `).join('');
 
   document.getElementById(targetId).innerHTML = `
     <table class="totals-table">
-      <thead><tr><th>Player</th><th>Wolf</th><th>Daytona</th><th>Match Play</th><th>Total</th></tr></thead>
+      <thead><tr><th>Player</th><th>Wolf</th><th>Daytona</th><th>Total</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
@@ -921,7 +904,7 @@ function switchTab(tabId) {
 }
 function renderFullData() {
   document.getElementById('setupCourseName').textContent = `Course: ${activeCourse().name}`;
-  document.getElementById('setupBetSummary').textContent = `Wolf: $${state.bets.smallStake}/$${state.bets.bigStake} (small/big team). Trash: $${state.bets.trashSmall}/$${state.bets.trashBig}. Daytona: $${state.bets.daytonaPointValue}/pt. Match Play: $${state.bets.matchUnit}/hole.`;
+  document.getElementById('setupBetSummary').textContent = `Wolf: $${state.bets.smallStake}/$${state.bets.bigStake} (small/big team). Trash: $${state.bets.trashSmall}/$${state.bets.trashBig}. Daytona: $${state.bets.daytonaPointValue}/pt. Match Play: status only, no $.`;
 
   renderScorecardInputs();
   renderScorecardSummary();
@@ -989,7 +972,7 @@ document.getElementById('resetRound').addEventListener('click', () => {
   const courses = state.courses, activeCourseId = state.activeCourseId, bets = state.bets;
   state = {
     players: names, handicapIndex, playerTeeIdx, playerRosterId, roster, courses, activeCourseId, bets,
-    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null
+    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, startHole: 1, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null
   };
   saveState();
   document.getElementById('tabs').style.display = 'none';
