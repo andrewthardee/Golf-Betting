@@ -11,8 +11,9 @@
   <h1>⛳ Fairway Stakes</h1>
   <nav id="tabs" class="tabs">
     <button data-tab="setup" class="tab active">Setup</button>
+    <button data-tab="scorecard" class="tab">Scorecard</button>
     <button data-tab="wolf" class="tab">Wolf</button>
-    <button data-tab="vegas" class="tab">Vegas</button>
+    <button data-tab="daytona" class="tab">Daytona</button>
     <button data-tab="matchplay" class="tab">Match Play</button>
     <button data-tab="summary" class="tab">Money</button>
   </nav>
@@ -46,8 +47,9 @@
 
   <div class="card">
     <h3>Bet Amounts</h3>
-    <label>Wolf — base $ per point/hole <input type="number" id="wolfUnit" value="1" min="0" step="0.5"></label>
-    <label>Vegas — $ per point of differential <input type="number" id="vegasUnit" value="1" min="0" step="0.5"></label>
+    <p class="hint">Wolf &amp; Daytona both use these per-man stakes: the smaller team (2 players) plays at the small stake, the larger team (3 players) plays at the big stake. Gross birdies and hammers double the hole's bet. Trash pays flat at each team's own stake — not doubled.</p>
+    <label>Small team stake ($/man, e.g. team of 2) <input type="number" id="smallStake" value="15" min="0" step="1"></label>
+    <label>Big team stake ($/man, e.g. team of 3, or lone-wolf holes) <input type="number" id="bigStake" value="10" min="0" step="1"></label>
     <label>Match Play — $ per hole won (per match) <input type="number" id="matchUnit" value="1" min="0" step="0.5"></label>
   </div>
 
@@ -56,19 +58,36 @@
   </div>
 </section>
 
+<!-- SCORECARD -->
+<section id="scorecard" class="panel">
+  <h2>Scorecard</h2>
+  <p class="hint">Enter gross scores here once per hole — Wolf, Daytona, and Match Play all pull from this.</p>
+  <div class="card">
+    <label>Hole # <input type="number" id="scHole" min="1" max="18" value="1"></label>
+    <div id="scPar" class="hint"></div>
+    <div id="scScores" class="score-grid"></div>
+    <button id="scSubmit">Save Hole Scores</button>
+  </div>
+  <div class="card">
+    <h3>Holes Entered</h3>
+    <div id="scSummary"></div>
+  </div>
+</section>
+
 <!-- WOLF -->
 <section id="wolf" class="panel">
   <h2>5-Man Wolf</h2>
   <div class="card">
-    <h3>Play Hole</h3>
+    <h3>Set Up This Hole</h3>
     <label>Hole # <input type="number" id="wolfHole" min="1" max="18" value="1"></label>
+    <div id="wolfScoreHint" class="hint"></div>
     <label>Wolf this hole <select id="wolfPlayer"></select></label>
     <div class="hint" id="wolfOrderHint"></div>
 
     <label>Mode
       <select id="wolfMode">
         <option value="partner">Pick a Partner</option>
-        <option value="lone">Lone Wolf (voluntary, before tee shots — pays/wins double)</option>
+        <option value="lone">Lone Wolf (voluntary, before tee shots)</option>
         <option value="forced">Lone Wolf (forced — no one wanted to partner)</option>
       </select>
     </label>
@@ -76,8 +95,11 @@
     <label>Hammers accepted (each doubles the bet) <input type="number" id="wolfHammers" min="0" value="0"></label>
     <p class="hint">A gross birdie (or better) by any player also doubles the bet, stacking with hammers.</p>
 
-    <h4>Gross Scores</h4>
-    <div id="wolfScores" class="score-grid"></div>
+    <div id="wolfTrashWrap">
+      <h4>Trash</h4>
+      <label id="wolfTrashALabel">Trash won by small team (2-man) <input type="number" id="wolfTrashA" min="0" value="0"></label>
+      <label id="wolfTrashBLabel">Trash won by big team (3-man) <input type="number" id="wolfTrashB" min="0" value="0"></label>
+    </div>
 
     <button id="wolfSubmit">Record Hole</button>
   </div>
@@ -93,30 +115,27 @@
   </div>
 </section>
 
-<!-- VEGAS -->
-<section id="vegas" class="panel">
-  <h2>Vegas</h2>
+<!-- DAYTONA -->
+<section id="daytona" class="panel">
+  <h2>Daytona</h2>
   <div class="card">
-    <h3>Play Hole</h3>
-    <label>Hole # <input type="number" id="vegasHole" min="1" max="18" value="1"></label>
-    <button id="vegasRandomize">🎲 Randomize Teams (2 vs 3)</button>
-    <div id="vegasTeamsDisplay" class="hint"></div>
-    <p class="hint">A gross birdie by either team flips the opposing team's two-digit number (worse for them).</p>
-
-    <h4>Gross Scores</h4>
-    <div id="vegasScores" class="score-grid"></div>
-
-    <button id="vegasSubmit">Record Hole</button>
+    <h3>Set Up This Hole</h3>
+    <label>Hole # <input type="number" id="dayHole" min="1" max="18" value="1"></label>
+    <div id="dayScoreHint" class="hint"></div>
+    <button id="dayRandomize">🎲 Randomize Teams (2 vs 3)</button>
+    <div id="dayTeamsDisplay" class="hint"></div>
+    <p class="hint">Team of 3 counts only its best + worst net scores. A gross birdie by either team flips the opposing team's two-digit number (worse for them). $/point uses the winning team's own stake (small team = $/man for 2, big team = $/man for 3).</p>
+    <button id="dayCompute">Compute Hole</button>
   </div>
 
   <div class="card">
     <h3>Hole Results</h3>
-    <div id="vegasResults"></div>
+    <div id="dayResults"></div>
   </div>
 
   <div class="card">
-    <h3>Vegas Totals</h3>
-    <div id="vegasTotals"></div>
+    <h3>Daytona Totals</h3>
+    <div id="dayTotals"></div>
   </div>
 </section>
 
@@ -124,13 +143,8 @@
 <section id="matchplay" class="panel">
   <h2>Round Robin Net Match Play</h2>
   <div class="card">
-    <h3>Enter Gross Scores for a Hole</h3>
-    <label>Hole # <input type="number" id="mpHole" min="1" max="18" value="1"></label>
-    <div id="mpScores" class="score-grid"></div>
-    <button id="mpSubmit">Record Hole</button>
-    <p class="hint">Net scores (using each player's strokes for the hole) decide every 1-on-1 match automatically.</p>
+    <p class="hint">Scored automatically from the Scorecard tab — net scores decide every 1-on-1 match.</p>
   </div>
-
   <div class="card">
     <h3>Match Statuses</h3>
     <div id="mpMatches"></div>
