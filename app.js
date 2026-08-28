@@ -18,8 +18,7 @@ function makeLakesideCourse() {
     id: 'lakeside_green',
     name: 'Lakeside (Green Tees)',
     holes: pars.map((par, i) => ({ par, si: sis[i] })),
-    // Rating/slope weren't on the scorecard photo — update these from the actual tee marker.
-    tees: [{ name: 'Green', rating: 72.0, slope: 113 }]
+    tees: [{ name: 'Green', rating: 74.9, slope: 135 }]
   };
 }
 
