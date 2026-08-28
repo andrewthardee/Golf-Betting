@@ -22,6 +22,17 @@ function makeLakesideCourse() {
   };
 }
 
+function makeLakesideChampionshipCourse() {
+  const pars = [4, 4, 5, 3, 4, 4, 4, 3, 5, 4, 3, 5, 4, 4, 4, 3, 5, 4];
+  const sis  = [11, 7, 3, 17, 1, 13, 5, 15, 9, 4, 16, 8, 2, 14, 6, 18, 12, 10];
+  return {
+    id: 'lakeside_championship',
+    name: 'Lakeside (Championship Tees)',
+    holes: pars.map((par, i) => ({ par, si: sis[i] })),
+    tees: [{ name: 'Championship', rating: 75.1, slope: 138 }]
+  };
+}
+
 let state = loadState() || {
   players: ['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Player 5'],
   handicapIndex: [0, 0, 0, 0, 0],
@@ -49,6 +60,9 @@ if (!state.handicapIndex) {
 if (!state.playerTeeIdx) state.playerTeeIdx = [0, 0, 0, 0, 0];
 if (!state.courses.some(c => c.id === 'lakeside_green')) {
   state.courses.push(makeLakesideCourse());
+}
+if (!state.courses.some(c => c.id === 'lakeside_championship')) {
+  state.courses.push(makeLakesideChampionshipCourse());
 }
 if (!state.bets.smallStake) state.bets.smallStake = 15;
 if (!state.bets.bigStake) state.bets.bigStake = 10;
