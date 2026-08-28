@@ -376,36 +376,17 @@ document.getElementById('addRosterBtn').addEventListener('click', () => {
 });
 
 function renderPlayerTable() {
-  const course = activeCourse();
   const ptBody = document.querySelector('#playerTable tbody');
   ptBody.innerHTML = '';
   state.players.forEach((name, i) => {
-    const rosterOptions = `<option value="">One-off / custom</option>` +
-      state.roster.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><select data-idx="${i}" class="playerRosterSel">${rosterOptions}</select></td>
       <td><input type="text" data-idx="${i}" class="playerName" value="${name}"></td>
       <td><input type="text" inputmode="decimal" data-idx="${i}" class="playerHcp" value="${state.handicapIndex[i]}"></td>
-      <td><select data-idx="${i}" class="playerTeeSel">${course.tees.map((t, ti) => `<option value="${ti}">${t.name}</option>`).join('')}</select></td>
-      <td class="courseHcpCell" data-idx="${i}">${playingHandicap(i)}</td>
+      <td class="courseHcpCell" data-idx="${i}">${courseHandicap(i)}</td>
+      <td class="strokesGivenCell" data-idx="${i}">${playingHandicap(i)}</td>
     `;
     ptBody.appendChild(tr);
-  });
-  ptBody.querySelectorAll('.playerRosterSel').forEach(el => {
-    el.value = state.playerRosterId[el.dataset.idx] || '';
-    el.addEventListener('change', e => {
-      const idx = Number(e.target.dataset.idx);
-      const rid = e.target.value || null;
-      state.playerRosterId[idx] = rid;
-      if (rid) {
-        const r = rosterById(rid);
-        state.players[idx] = r.name;
-        state.handicapIndex[idx] = r.handicapIndex;
-      }
-      saveState();
-      renderPlayerTable();
-    });
   });
   ptBody.querySelectorAll('.playerName').forEach(el => el.addEventListener('input', e => {
     const idx = Number(e.target.dataset.idx);
@@ -422,17 +403,12 @@ function renderPlayerTable() {
     saveState();
     updateCourseHcpCells();
   }));
-  ptBody.querySelectorAll('.playerTeeSel').forEach(el => {
-    el.value = state.playerTeeIdx[el.dataset.idx] || 0;
-    el.addEventListener('change', e => {
-      state.playerTeeIdx[e.target.dataset.idx] = Number(e.target.value) || 0;
-      saveState();
-      updateCourseHcpCells();
-    });
-  });
 }
 function updateCourseHcpCells() {
   document.querySelectorAll('.courseHcpCell').forEach(el => {
+    el.textContent = courseHandicap(Number(el.dataset.idx));
+  });
+  document.querySelectorAll('.strokesGivenCell').forEach(el => {
     el.textContent = playingHandicap(Number(el.dataset.idx));
   });
 }
