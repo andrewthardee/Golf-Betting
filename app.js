@@ -147,6 +147,13 @@ function holeHasScores(hole) {
   return state.players.every((_, i) => h.scores[i] !== undefined && h.scores[i] !== '');
 }
 
+/* ---------- Money formatting ---------- */
+function fmtMoney(v) {
+  const cls = v >= 0 ? 'money-pos' : 'money-neg';
+  const text = v >= 0 ? `$${v.toFixed(2)}` : `($${Math.abs(v).toFixed(2)})`;
+  return `<span class="${cls}">${text}</span>`;
+}
+
 /* ---------- Screen navigation ---------- */
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -687,9 +694,10 @@ function formatWolfHoleResult(hole, data) {
   const trashNote = (data.trashA || data.trashB)
     ? `<br><span class="hint">Trash: ${data.trashA || 0} to ${data.mode === 'partner' ? 'small team' : 'wolf'}, ${data.trashB || 0} to ${data.mode === 'partner' ? 'big team' : 'the other 4'}</span>`
     : '';
-  const wolfPayoutLine = state.players.map((p, i) => `${p} ${r.wolfPayouts[i] >= 0 ? '+' : ''}$${r.wolfPayouts[i].toFixed(2)}`).join(', ');
-  const trashPayoutLine = state.players.map((p, i) => `${p} ${r.trashPayouts[i] >= 0 ? '+' : ''}$${r.trashPayouts[i].toFixed(2)}`).join(', ');
-  return `<div class="result-row"><b>Hole ${hole}</b>: ${wolfName} is wolf ${modeLabel}<br>${outcome}${trashNote}<br><span class="hint">Wolf: ${wolfPayoutLine}</span><br><span class="hint">Trash: ${trashPayoutLine}</span></div>`;
+  const wolfPayoutLine = state.players.map((p, i) => `${p} ${fmtMoney(r.wolfPayouts[i])}`).join(', ');
+  const trashPayoutLine = state.players.map((p, i) => `${p} ${fmtMoney(r.trashPayouts[i])}`).join(', ');
+  const totalPayoutLine = state.players.map((p, i) => `${p} ${fmtMoney(r.payouts[i])}`).join(', ');
+  return `<div class="result-row"><b>Hole ${hole}</b>: ${wolfName} is wolf ${modeLabel}<br>${outcome}${trashNote}<br><span class="hint">Wolf: ${wolfPayoutLine}</span><br><span class="hint">Trash: ${trashPayoutLine}</span><br><span class="hint">Total: ${totalPayoutLine}</span></div>`;
 }
 
 /* ---------- Daytona math ---------- */
@@ -745,7 +753,7 @@ function formatDaytonaHoleResult(hole, data) {
     r.flippedA ? `${teamBName} birdied — ${teamAName}'s number flipped` : '',
     r.flippedB ? `${teamAName} birdied — ${teamBName}'s number flipped` : ''
   ].filter(Boolean).join('; ');
-  const payoutLine = state.players.map((p, i) => `${p} ${r.payouts[i] >= 0 ? '+' : ''}$${r.payouts[i].toFixed(2)}`).join(', ');
+  const payoutLine = state.players.map((p, i) => `${p} ${fmtMoney(r.payouts[i])}`).join(', ');
   return `<div class="result-row"><b>Hole ${hole}</b>: ${teamAName} (2) vs ${teamBName} (3)<br>${outcome}${flipNote ? `<br><span class="hint">${flipNote}</span>` : ''}<br><span class="hint">${payoutLine}</span></div>`;
 }
 
@@ -819,9 +827,9 @@ function renderSummary(targetId) {
   const rows = state.players.map((p, i) => `
     <tr>
       <td>${p}</td>
-      <td class="${wolfSums[i] >= 0 ? 'money-pos' : 'money-neg'}">${wolfSums[i] >= 0 ? '+' : ''}$${wolfSums[i].toFixed(2)}</td>
-      <td class="${daySums[i] >= 0 ? 'money-pos' : 'money-neg'}">${daySums[i] >= 0 ? '+' : ''}$${daySums[i].toFixed(2)}</td>
-      <td class="${totalSums[i] >= 0 ? 'money-pos' : 'money-neg'}"><b>${totalSums[i] >= 0 ? '+' : ''}$${totalSums[i].toFixed(2)}</b></td>
+      <td>${fmtMoney(wolfSums[i])}</td>
+      <td>${fmtMoney(daySums[i])}</td>
+      <td><b>${fmtMoney(totalSums[i])}</b></td>
     </tr>
   `).join('');
 
@@ -933,7 +941,7 @@ function renderFullData() {
     r.wolfPayouts.forEach((p, i) => wolfOnlySums[i] += p);
     r.trashPayouts.forEach((p, i) => trashSums[i] += p);
   });
-  const fmt = v => `<td class="${v >= 0 ? 'money-pos' : 'money-neg'}">${v >= 0 ? '+' : ''}$${v.toFixed(2)}</td>`;
+  const fmt = v => `<td>${fmtMoney(v)}</td>`;
   document.getElementById('wolfTotals').innerHTML = `<table class="totals-table"><thead><tr><th>Player</th><th>Wolf</th><th>Trash</th><th>Total</th></tr></thead><tbody>${
     state.players.map((p, i) => `<tr><td>${p}</td>${fmt(wolfOnlySums[i])}${fmt(trashSums[i])}${fmt(wolfOnlySums[i] + trashSums[i])}</tr>`).join('')
   }</tbody></table>`;
@@ -944,7 +952,7 @@ function renderFullData() {
     : '<p class="hint">No holes recorded yet.</p>';
   const daySums = state.players.map(() => 0);
   dayHoles.forEach(h => { computeDaytonaHole(h, state.dayHoles[h]).payouts.forEach((p, i) => daySums[i] += p); });
-  document.getElementById('dayTotals').innerHTML = `<table class="totals-table">${state.players.map((p, i) => `<tr><td>${p}</td><td class="${daySums[i] >= 0 ? 'money-pos' : 'money-neg'}">${daySums[i] >= 0 ? '+' : ''}$${daySums[i].toFixed(2)}</td></tr>`).join('')}</table>`;
+  document.getElementById('dayTotals').innerHTML = `<table class="totals-table">${state.players.map((p, i) => `<tr><td>${p}</td><td>${fmtMoney(daySums[i])}</td></tr>`).join('')}</table>`;
 
   renderMatchplay('mpMatches');
   renderSummary('summaryTable');

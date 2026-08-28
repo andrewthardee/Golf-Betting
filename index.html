@@ -191,14 +191,14 @@
 
   <div class="card">
     <h3>Wolf Extras</h3>
-    <label>Hammers accepted (each doubles the Wolf bet) <input type="number" id="wolfHammers" min="0" value="0"></label>
+    <label>Hammers accepted (each doubles the Wolf bet) <input type="text" inputmode="numeric" pattern="[0-9]*" id="wolfHammers" value="0"></label>
     <p class="hint">A gross birdie (or better) by any player also doubles the Wolf bet, stacking with hammers.</p>
   </div>
 
   <div class="card">
     <h3>Trash</h3>
-    <label id="holeTrashALabel">Trash won by small team <input type="number" id="holeTrashA" min="0" value="0"></label>
-    <label id="holeTrashBLabel">Trash won by big team <input type="number" id="holeTrashB" min="0" value="0"></label>
+    <label id="holeTrashALabel">Trash won by small team <input type="text" inputmode="numeric" pattern="[0-9]*" id="holeTrashA" value="0"></label>
+    <label id="holeTrashBLabel">Trash won by big team <input type="text" inputmode="numeric" pattern="[0-9]*" id="holeTrashB" value="0"></label>
   </div>
 
   <button id="submitHoleBtn" class="primary-btn">Submit Hole →</button>
