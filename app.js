@@ -571,7 +571,7 @@ function prepareEnterScoresScreen() {
   grid.innerHTML = state.players.map((p, i) => `
     <div>
       <label for="holeScore${i}">${p}</label>
-      <input type="number" id="holeScore${i}" min="1" value="${existingHole && existingHole.scores[i] !== undefined ? existingHole.scores[i] : ''}">
+      <input type="text" inputmode="numeric" pattern="[0-9]*" id="holeScore${i}" value="${existingHole && existingHole.scores[i] !== undefined ? existingHole.scores[i] : ''}">
     </div>
   `).join('');
 
@@ -687,8 +687,9 @@ function formatWolfHoleResult(hole, data) {
   const trashNote = (data.trashA || data.trashB)
     ? `<br><span class="hint">Trash: ${data.trashA || 0} to ${data.mode === 'partner' ? 'small team' : 'wolf'}, ${data.trashB || 0} to ${data.mode === 'partner' ? 'big team' : 'the other 4'}</span>`
     : '';
-  const payoutLine = state.players.map((p, i) => `${p} ${r.payouts[i] >= 0 ? '+' : ''}$${r.payouts[i].toFixed(2)}`).join(', ');
-  return `<div class="result-row"><b>Hole ${hole}</b>: ${wolfName} is wolf ${modeLabel}<br>${outcome}${trashNote}<br><span class="hint">${payoutLine}</span></div>`;
+  const wolfPayoutLine = state.players.map((p, i) => `${p} ${r.wolfPayouts[i] >= 0 ? '+' : ''}$${r.wolfPayouts[i].toFixed(2)}`).join(', ');
+  const trashPayoutLine = state.players.map((p, i) => `${p} ${r.trashPayouts[i] >= 0 ? '+' : ''}$${r.trashPayouts[i].toFixed(2)}`).join(', ');
+  return `<div class="result-row"><b>Hole ${hole}</b>: ${wolfName} is wolf ${modeLabel}<br>${outcome}${trashNote}<br><span class="hint">Wolf: ${wolfPayoutLine}</span><br><span class="hint">Trash: ${trashPayoutLine}</span></div>`;
 }
 
 /* ---------- Daytona math ---------- */
@@ -854,7 +855,29 @@ document.getElementById('viewStandingsBtn').addEventListener('click', () => {
 
 function prepareStandings() {
   renderSummary('standingsSummary');
+  renderScoreTotals('standingsScores');
   renderMatchplay('standingsMatches');
+}
+
+function renderScoreTotals(targetId) {
+  const holes = Object.keys(state.holes).map(Number).filter(holeHasScores).sort((a, b) => a - b);
+  const grossTotals = state.players.map(() => 0);
+  const netTotals = state.players.map(() => 0);
+  holes.forEach(h => {
+    state.players.forEach((_, i) => {
+      grossTotals[i] += Number(state.holes[h].scores[i]);
+      netTotals[i] += netScore(i, h, state.holes[h].scores[i]);
+    });
+  });
+  document.getElementById(targetId).innerHTML = holes.length ? `
+    <table class="totals-table">
+      <thead><tr><th></th>${state.players.map(p => `<th>${p}</th>`).join('')}</tr></thead>
+      <tbody>
+        <tr><td><b>Gross</b></td>${grossTotals.map(v => `<td>${v}</td>`).join('')}</tr>
+        <tr><td><b>Net</b></td>${netTotals.map(v => `<td>${v}</td>`).join('')}</tr>
+      </tbody>
+    </table>
+  ` : '<p class="hint">No holes recorded yet.</p>';
 }
 
 document.getElementById('standingsLink').addEventListener('click', () => {
@@ -935,7 +958,7 @@ function renderScorecardInputs() {
   grid.innerHTML = state.players.map((p, i) => `
     <div>
       <label for="scScore${i}">${p}</label>
-      <input type="number" id="scScore${i}" min="1" value="${existing && existing.scores[i] !== undefined ? existing.scores[i] : ''}">
+      <input type="text" inputmode="numeric" pattern="[0-9]*" id="scScore${i}" value="${existing && existing.scores[i] !== undefined ? existing.scores[i] : ''}">
     </div>
   `).join('');
 }
