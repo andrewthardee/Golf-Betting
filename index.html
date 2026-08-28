@@ -58,10 +58,20 @@
   </div>
 
   <div class="card">
-    <h3>Players, Tees &amp; Handicaps</h3>
-    <p class="hint">Enter each player's Handicap Index (from GHIN) and the tee they're playing. Course Handicap is computed the same way GHIN does: Round(Handicap Index × Slope/113 + (Rating − Par)).</p>
+    <h3>Player Roster</h3>
+    <p class="hint">Your regular group, saved so you don't retype names/handicaps every round. Update a Handicap Index here whenever it changes in GHIN.</p>
+    <table class="input-table" id="rosterTable">
+      <thead><tr><th>Name</th><th>Handicap Index</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button id="addRosterBtn" type="button">+ Add Player to Roster</button>
+  </div>
+
+  <div class="card">
+    <h3>Today's 5 Players, Tees &amp; Handicaps</h3>
+    <p class="hint">Pick each player from your roster and the tee they're playing. Course Handicap is computed the same way GHIN does: Round(Handicap Index × Slope/113 + (Rating − Par)). Picking "One-off / custom" lets you type a name for a fill-in without saving them to the roster.</p>
     <table class="input-table" id="playerTable">
-      <thead><tr><th>Player</th><th>Handicap Index</th><th>Tee</th><th>Course Hcp</th></tr></thead>
+      <thead><tr><th>Roster</th><th>Player</th><th>Handicap Index</th><th>Tee</th><th>Course Hcp</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>

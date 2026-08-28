@@ -15,6 +15,8 @@ let state = loadState() || {
   players: ['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Player 5'],
   handicapIndex: [0, 0, 0, 0, 0],
   playerTeeIdx: [0, 0, 0, 0, 0],
+  playerRosterId: [null, null, null, null, null],
+  roster: [],
   courses: [makeDefaultCourse()],
   activeCourseId: 'default',
   bets: { smallStake: 15, bigStake: 10, matchUnit: 1 },
@@ -38,6 +40,17 @@ if (!state.bets.smallStake) state.bets.smallStake = 15;
 if (!state.bets.bigStake) state.bets.bigStake = 10;
 if (!state.holes) state.holes = {};
 if (!state.dayHoles) state.dayHoles = {};
+
+// Migrate older saved rounds (no roster yet) — seed the roster from today's 5 players.
+if (!state.roster) {
+  state.roster = state.players.map((name, i) => ({
+    id: 'roster_' + i + '_' + Date.now(),
+    name,
+    handicapIndex: state.handicapIndex[i] || 0
+  }));
+  state.playerRosterId = state.roster.map(r => r.id);
+}
+if (!state.playerRosterId) state.playerRosterId = [null, null, null, null, null];
 
 function loadState() {
   try {
@@ -104,6 +117,7 @@ function renderSetup() {
   renderCourseSelect();
   renderCourseHoleTable();
   renderTeeTable();
+  renderRosterTable();
   renderPlayerTable();
 
   document.getElementById('smallStake').value = state.bets.smallStake;
@@ -219,13 +233,63 @@ document.getElementById('addTeeBtn').addEventListener('click', () => {
   renderSetup();
 });
 
+/* ---------- Player Roster ---------- */
+function rosterById(id) {
+  return state.roster.find(r => r.id === id);
+}
+function renderRosterTable() {
+  const body = document.querySelector('#rosterTable tbody');
+  body.innerHTML = '';
+  state.roster.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" data-id="${r.id}" class="rosterName" value="${r.name}"></td>
+      <td><input type="number" data-id="${r.id}" class="rosterHcp" value="${r.handicapIndex}" min="-10" max="54" step="0.1"></td>
+      <td><button type="button" class="danger removeRoster" data-id="${r.id}">✕</button></td>
+    `;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll('.rosterName').forEach(el => el.addEventListener('input', e => {
+    const r = rosterById(e.target.dataset.id);
+    r.name = e.target.value || r.name;
+    saveState();
+    renderPlayerTable();
+  }));
+  body.querySelectorAll('.rosterHcp').forEach(el => el.addEventListener('input', e => {
+    const r = rosterById(e.target.dataset.id);
+    r.handicapIndex = Number(e.target.value) || 0;
+    saveState();
+    renderPlayerTable();
+  }));
+  body.querySelectorAll('.removeRoster').forEach(el => el.addEventListener('click', e => {
+    const id = e.target.dataset.id;
+    if (!confirm('Remove this player from the roster?')) return;
+    state.roster = state.roster.filter(r => r.id !== id);
+    state.playerRosterId = state.playerRosterId.map(rid => rid === id ? null : rid);
+    saveState();
+    renderSetup();
+  }));
+}
+document.getElementById('addRosterBtn').addEventListener('click', () => {
+  const name = prompt('Player name:');
+  if (!name) return;
+  const hiRaw = prompt('Handicap Index:', '10.0');
+  const hi = Number(hiRaw) || 0;
+  state.roster.push({ id: 'roster_' + Date.now(), name, handicapIndex: hi });
+  saveState();
+  renderSetup();
+});
+
 function renderPlayerTable() {
   const course = activeCourse();
   const ptBody = document.querySelector('#playerTable tbody');
   ptBody.innerHTML = '';
   state.players.forEach((name, i) => {
+    const rosterOptions = `<option value="">One-off / custom</option>` +
+      state.roster.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td><select data-idx="${i}" class="playerRosterSel">${rosterOptions}</select></td>
       <td><input type="text" data-idx="${i}" class="playerName" value="${name}"></td>
       <td><input type="number" data-idx="${i}" class="playerHcp" value="${state.handicapIndex[i]}" min="-10" max="54" step="0.1"></td>
       <td><select data-idx="${i}" class="playerTeeSel">${course.tees.map((t, ti) => `<option value="${ti}">${t.name}</option>`).join('')}</select></td>
@@ -233,12 +297,33 @@ function renderPlayerTable() {
     `;
     ptBody.appendChild(tr);
   });
+  ptBody.querySelectorAll('.playerRosterSel').forEach(el => {
+    el.value = state.playerRosterId[el.dataset.idx] || '';
+    el.addEventListener('change', e => {
+      const idx = Number(e.target.dataset.idx);
+      const rid = e.target.value || null;
+      state.playerRosterId[idx] = rid;
+      if (rid) {
+        const r = rosterById(rid);
+        state.players[idx] = r.name;
+        state.handicapIndex[idx] = r.handicapIndex;
+      }
+      saveState();
+      renderAll();
+    });
+  });
   ptBody.querySelectorAll('.playerName').forEach(el => el.addEventListener('input', e => {
-    state.players[e.target.dataset.idx] = e.target.value || `Player ${Number(e.target.dataset.idx)+1}`;
+    const idx = Number(e.target.dataset.idx);
+    state.players[idx] = e.target.value || `Player ${idx + 1}`;
+    const rid = state.playerRosterId[idx];
+    if (rid) rosterById(rid).name = state.players[idx];
     saveState(); renderAll();
   }));
   ptBody.querySelectorAll('.playerHcp').forEach(el => el.addEventListener('input', e => {
-    state.handicapIndex[e.target.dataset.idx] = Number(e.target.value) || 0;
+    const idx = Number(e.target.dataset.idx);
+    state.handicapIndex[idx] = Number(e.target.value) || 0;
+    const rid = state.playerRosterId[idx];
+    if (rid) rosterById(rid).handicapIndex = state.handicapIndex[idx];
     saveState();
     renderPlayerTable();
   }));
@@ -259,8 +344,9 @@ document.getElementById('matchUnit').addEventListener('input', e => { state.bets
 document.getElementById('resetRound').addEventListener('click', () => {
   if (!confirm('This clears all scores, teams, and results for the round (course library and players stay). Continue?')) return;
   const names = state.players, handicapIndex = state.handicapIndex, playerTeeIdx = state.playerTeeIdx;
+  const playerRosterId = state.playerRosterId, roster = state.roster;
   const courses = state.courses, activeCourseId = state.activeCourseId, bets = state.bets;
-  state = { players: names, handicapIndex, playerTeeIdx, courses, activeCourseId, bets, holes: {}, wolfHoles: {}, dayHoles: {} };
+  state = { players: names, handicapIndex, playerTeeIdx, playerRosterId, roster, courses, activeCourseId, bets, holes: {}, wolfHoles: {}, dayHoles: {} };
   saveState();
   renderAll();
 });
