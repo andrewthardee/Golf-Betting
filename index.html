@@ -9,36 +9,52 @@
 <body>
 <header class="topbar">
   <h1>⛳ Fairway Stakes</h1>
-  <nav id="tabs" class="tabs">
-    <button data-tab="setup" class="tab active">Setup</button>
+  <div id="roundBar" class="round-bar" style="display:none;">
+    <span id="holeIndicator"></span>
+    <span class="round-bar-links">
+      <button id="standingsLink" type="button" class="linklike">Standings</button>
+      <button id="fullDataLink" type="button" class="linklike">Full Data</button>
+      <button id="newRoundLink" type="button" class="linklike danger-link">New Round</button>
+    </span>
+  </div>
+  <nav id="tabs" class="tabs" style="display:none;">
+    <button data-tab="setup" class="tab">Setup</button>
     <button data-tab="scorecard" class="tab">Scorecard</button>
     <button data-tab="wolf" class="tab">Wolf</button>
     <button data-tab="daytona" class="tab">Daytona</button>
     <button data-tab="matchplay" class="tab">Match Play</button>
     <button data-tab="summary" class="tab">Money</button>
+    <button id="closeFullData" class="tab tab-close" type="button">✕ Close</button>
   </nav>
 </header>
 
 <main id="app">
 
-<!-- SETUP -->
-<section id="setup" class="panel active">
-  <h2>Round Setup</h2>
+<!-- ============ HOME ============ -->
+<section id="home" class="screen active">
+  <div class="hero">
+    <div class="hero-emoji">⛳</div>
+    <h2>Fairway Stakes</h2>
+    <p class="hint">Wolf · Daytona · Round Robin Match Play</p>
+    <button id="startRoundBtn" class="primary-btn">▶ Start Round</button>
+  </div>
+</section>
 
+<!-- ============ STEP 1: COURSE ============ -->
+<section id="scrCourse" class="screen">
+  <h2>Step 1 of 3 — Choose Course</h2>
   <div class="card">
-    <h3>Course Library</h3>
-    <p class="hint">Set up each course once (par &amp; stroke index per hole, plus rating/slope per tee) and reuse it for future rounds.</p>
-    <label>Course being played
-      <select id="courseSelect"></select>
-    </label>
-    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-      <button id="newCourseBtn" type="button">+ New Course</button>
-      <button id="renameCourseBtn" type="button">Rename</button>
-      <button id="deleteCourseBtn" type="button" class="danger">Delete Course</button>
-    </div>
+    <div id="courseCardList" class="course-card-list"></div>
+    <button id="addCourseBtn" type="button">+ Add Course</button>
+    <p class="hint">📷 Easiest way: snap a photo of the scorecard and send it to Claude in chat along with the tee you're playing — it'll add the course here for you. Or fill it in manually below.</p>
+  </div>
+
+  <div class="card" id="courseEditorCard" style="display:none;">
+    <h3 id="courseEditorTitle">Add Course</h3>
+    <label>Course name <input type="text" id="courseNameInput" placeholder="e.g. Lakeside Golf Club"></label>
 
     <h4>Holes — Par &amp; Stroke Index</h4>
-    <p class="hint">Stroke index 1 = hardest hole (gets strokes first). This is what determines birdies and stroke allocation.</p>
+    <p class="hint">Stroke index 1 = hardest hole (gets strokes first).</p>
     <div class="table-scroll">
     <table class="input-table" id="courseTable">
       <thead><tr><th>Hole</th><th>Par</th><th>Stroke Index</th></tr></thead>
@@ -55,11 +71,24 @@
     </table>
     </div>
     <button id="addTeeBtn" type="button">+ Add Tee</button>
+
+    <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+      <button id="saveCourseBtn" type="button">Save Course</button>
+      <button id="cancelCourseBtn" type="button" class="secondary-btn">Cancel</button>
+      <button id="deleteCourseBtn" type="button" class="danger" style="display:none;">Delete</button>
+    </div>
   </div>
+
+  <button id="courseContinueBtn" class="primary-btn" disabled>Continue →</button>
+</section>
+
+<!-- ============ STEP 2: PLAYERS ============ -->
+<section id="scrPlayers" class="screen">
+  <h2>Step 2 of 3 — Players &amp; Handicaps</h2>
 
   <div class="card">
     <h3>Player Roster</h3>
-    <p class="hint">Your regular group, saved so you don't retype names/handicaps every round. Update a Handicap Index here whenever it changes in GHIN.</p>
+    <p class="hint">Your regular group, saved so you don't retype names/handicaps every round.</p>
     <table class="input-table" id="rosterTable">
       <thead><tr><th>Name</th><th>Handicap Index</th><th></th></tr></thead>
       <tbody></tbody>
@@ -68,20 +97,134 @@
   </div>
 
   <div class="card">
-    <h3>Today's 5 Players, Tees &amp; Handicaps</h3>
-    <p class="hint">Pick each player from your roster and the tee they're playing. Course Handicap is computed the same way GHIN does: Round(Handicap Index × Slope/113 + (Rating − Par)). Picking "One-off / custom" lets you type a name for a fill-in without saving them to the roster.</p>
+    <h3>Today's 5 Players</h3>
+    <p class="hint">Pick each player from your roster and the tee they're playing. Course Handicap = Round(Handicap Index × Slope/113 + (Rating − Par)), same as GHIN.</p>
     <table class="input-table" id="playerTable">
-      <thead><tr><th>Roster</th><th>Player</th><th>Handicap Index</th><th>Tee</th><th>Course Hcp</th></tr></thead>
+      <thead><tr><th>Roster</th><th>Player</th><th>GHIN Index</th><th>Tee</th><th>Course Hcp</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
 
+  <div style="display:flex; gap:0.5rem;">
+    <button id="playersBackBtn" class="secondary-btn">← Back</button>
+    <button id="playersContinueBtn" class="primary-btn">Continue →</button>
+  </div>
+</section>
+
+<!-- ============ STEP 3: BETS ============ -->
+<section id="scrBets" class="screen">
+  <h2>Step 3 of 3 — Bet Amounts</h2>
   <div class="card">
-    <h3>Bet Amounts</h3>
-    <p class="hint">Wolf &amp; Daytona both use these per-man stakes: the smaller team (2 players) plays at the small stake, the larger team (3 players) plays at the big stake. Gross birdies and hammers double the hole's bet. Trash pays flat at each team's own stake — not doubled.</p>
+    <p class="hint">Wolf &amp; Daytona both use these per-man stakes: the smaller team (2 players) plays at the small stake, the larger team (3 players, and lone-wolf holes) plays at the big stake. Gross birdies and hammers double the hole's Wolf bet. Trash pays flat at each team's own stake.</p>
     <label>Small team stake ($/man, e.g. team of 2) <input type="number" id="smallStake" value="15" min="0" step="1"></label>
     <label>Big team stake ($/man, e.g. team of 3, or lone-wolf holes) <input type="number" id="bigStake" value="10" min="0" step="1"></label>
     <label>Match Play — $ per hole won (per match) <input type="number" id="matchUnit" value="1" min="0" step="0.5"></label>
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <button id="betsBackBtn" class="secondary-btn">← Back</button>
+    <button id="beginRoundBtn" class="primary-btn">Begin Round 🏌️</button>
+  </div>
+</section>
+
+<!-- ============ HOLE SETUP (once, at round start) ============ -->
+<section id="scrHoleSetup" class="screen">
+  <h2>Starting Hole &amp; Wolf Order</h2>
+  <div class="card">
+    <label>Starting hole # <input type="number" id="startHoleInput" min="1" max="18" value="1"></label>
+    <h4>Wolf Order (tee order — rotates every hole)</h4>
+    <div id="wolfOrderList" class="wolf-order-list"></div>
+  </div>
+  <button id="holeSetupContinueBtn" class="primary-btn">Continue →</button>
+</section>
+
+<!-- ============ POST TEE SHOT ============ -->
+<section id="scrTeeShot" class="screen">
+  <h2 id="teeShotTitle">Post Tee Shot</h2>
+  <div class="card">
+    <label>Wolf this hole <select id="wolfPlayer"></select></label>
+    <div class="hint" id="wolfOrderHint"></div>
+
+    <label>Mode
+      <select id="wolfMode">
+        <option value="partner">Pick a Partner</option>
+        <option value="lone">Lone Wolf (voluntary, before tee shots)</option>
+        <option value="forced">Lone Wolf (forced — no one wanted to partner)</option>
+      </select>
+    </label>
+    <label id="wolfPartnerWrap">Partner <select id="wolfPartner"></select></label>
+    <label>Hammers accepted (each doubles the bet) <input type="number" id="wolfHammers" min="0" value="0"></label>
+    <p class="hint">A gross birdie (or better) by any player also doubles the Wolf bet, stacking with hammers.</p>
+  </div>
+  <button id="teeShotContinueBtn" class="primary-btn">Continue to Scores →</button>
+</section>
+
+<!-- ============ ENTER SCORES ============ -->
+<section id="scrEnterScores" class="screen">
+  <h2 id="enterScoresTitle">Enter Scores</h2>
+
+  <div class="card">
+    <h3>Teams This Hole</h3>
+    <div id="wolfTeamsRef" class="hint"></div>
+    <div id="daytonaTeamsRef" class="hint"></div>
+  </div>
+
+  <div class="card">
+    <h3>Gross Scores</h3>
+    <div id="holeParHint" class="hint"></div>
+    <div id="holeScores" class="score-grid"></div>
+  </div>
+
+  <div class="card">
+    <h3>Trash</h3>
+    <label id="holeTrashALabel">Trash won by small team <input type="number" id="holeTrashA" min="0" value="0"></label>
+    <label id="holeTrashBLabel">Trash won by big team <input type="number" id="holeTrashB" min="0" value="0"></label>
+  </div>
+
+  <button id="submitHoleBtn" class="primary-btn">Submit Hole →</button>
+</section>
+
+<!-- ============ HOLE SUMMARY ============ -->
+<section id="scrHoleSummary" class="screen">
+  <h2 id="holeSummaryTitle">Hole 1 Summary</h2>
+  <div class="card">
+    <h3>Wolf</h3>
+    <div id="holeSummaryWolf"></div>
+  </div>
+  <div class="card">
+    <h3>Daytona</h3>
+    <div id="holeSummaryDaytona"></div>
+  </div>
+  <div class="card">
+    <h3>Match Play — This Hole</h3>
+    <div id="holeSummaryMatches"></div>
+  </div>
+  <button id="viewStandingsBtn" class="primary-btn">View Standings →</button>
+</section>
+
+<!-- ============ CUMULATIVE STANDINGS ============ -->
+<section id="scrStandings" class="screen">
+  <h2>Cumulative Standings</h2>
+  <div class="card">
+    <h3>Money</h3>
+    <div id="standingsSummary"></div>
+  </div>
+  <div class="card">
+    <h3>Match Play Status</h3>
+    <div id="standingsMatches"></div>
+  </div>
+  <button id="nextHoleBtn" class="primary-btn">Next Hole →</button>
+</section>
+
+<!-- ============ OLD "FULL DATA" TABS (fallback / manual edit) ============ -->
+
+<!-- SETUP -->
+<section id="setup" class="panel">
+  <h2>Round Setup (Full Data)</h2>
+
+  <div class="card">
+    <h3>Currently Playing</h3>
+    <div id="setupCourseName" class="hint"></div>
+    <div id="setupBetSummary" class="hint"></div>
   </div>
 
   <div class="card">
@@ -92,7 +235,7 @@
 <!-- SCORECARD -->
 <section id="scorecard" class="panel">
   <h2>Scorecard</h2>
-  <p class="hint">Enter gross scores here once per hole — Wolf, Daytona, and Match Play all pull from this.</p>
+  <p class="hint">Full grid of every hole entered so far.</p>
   <div class="card">
     <label>Hole # <input type="number" id="scHole" min="1" max="18" value="1"></label>
     <div id="scPar" class="hint"></div>
@@ -107,39 +250,11 @@
 
 <!-- WOLF -->
 <section id="wolf" class="panel">
-  <h2>5-Man Wolf</h2>
-  <div class="card">
-    <h3>Set Up This Hole</h3>
-    <label>Hole # <input type="number" id="wolfHole" min="1" max="18" value="1"></label>
-    <div id="wolfScoreHint" class="hint"></div>
-    <label>Wolf this hole <select id="wolfPlayer"></select></label>
-    <div class="hint" id="wolfOrderHint"></div>
-
-    <label>Mode
-      <select id="wolfMode">
-        <option value="partner">Pick a Partner</option>
-        <option value="lone">Lone Wolf (voluntary, before tee shots)</option>
-        <option value="forced">Lone Wolf (forced — no one wanted to partner)</option>
-      </select>
-    </label>
-    <label id="wolfPartnerWrap">Partner <select id="wolfPartner"></select></label>
-    <label>Hammers accepted (each doubles the bet) <input type="number" id="wolfHammers" min="0" value="0"></label>
-    <p class="hint">A gross birdie (or better) by any player also doubles the bet, stacking with hammers.</p>
-
-    <div id="wolfTrashWrap">
-      <h4>Trash</h4>
-      <label id="wolfTrashALabel">Trash won by small team (2-man) <input type="number" id="wolfTrashA" min="0" value="0"></label>
-      <label id="wolfTrashBLabel">Trash won by big team (3-man) <input type="number" id="wolfTrashB" min="0" value="0"></label>
-    </div>
-
-    <button id="wolfSubmit">Record Hole</button>
-  </div>
-
+  <h2>5-Man Wolf (Full Data)</h2>
   <div class="card">
     <h3>Hole Results</h3>
     <div id="wolfResults"></div>
   </div>
-
   <div class="card">
     <h3>Wolf Totals</h3>
     <div id="wolfTotals"></div>
@@ -148,22 +263,11 @@
 
 <!-- DAYTONA -->
 <section id="daytona" class="panel">
-  <h2>Daytona</h2>
-  <div class="card">
-    <h3>Set Up This Hole</h3>
-    <label>Hole # <input type="number" id="dayHole" min="1" max="18" value="1"></label>
-    <div id="dayScoreHint" class="hint"></div>
-    <button id="dayRandomize">🎲 Randomize Teams (2 vs 3)</button>
-    <div id="dayTeamsDisplay" class="hint"></div>
-    <p class="hint">Team of 3 counts only its best + worst net scores. A gross birdie by either team flips the opposing team's two-digit number (worse for them). $/point uses the winning team's own stake (small team = $/man for 2, big team = $/man for 3).</p>
-    <button id="dayCompute">Compute Hole</button>
-  </div>
-
+  <h2>Daytona (Full Data)</h2>
   <div class="card">
     <h3>Hole Results</h3>
     <div id="dayResults"></div>
   </div>
-
   <div class="card">
     <h3>Daytona Totals</h3>
     <div id="dayTotals"></div>
@@ -173,9 +277,6 @@
 <!-- MATCH PLAY -->
 <section id="matchplay" class="panel">
   <h2>Round Robin Net Match Play</h2>
-  <div class="card">
-    <p class="hint">Scored automatically from the Scorecard tab — net scores decide every 1-on-1 match.</p>
-  </div>
   <div class="card">
     <h3>Match Statuses</h3>
     <div id="mpMatches"></div>

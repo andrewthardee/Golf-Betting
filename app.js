@@ -42,12 +42,16 @@ let state = loadState() || {
   courses: [makeDefaultCourse()],
   activeCourseId: 'default',
   bets: { smallStake: 15, bigStake: 10, matchUnit: 1 },
-  holes: {},       // shared gross scores: { [hole]: { scores: {0..4: gross} } }
-  wolfHoles: {},    // { [hole]: { wolf, mode, partner, hammers, trashA, trashB } }
-  dayHoles: {}      // { [hole]: { teamOf2, teamOf3 } }
+  holes: {},
+  wolfHoles: {},
+  dayHoles: {},
+  roundStarted: false,
+  currentHole: 1,
+  wolfOrder: [0, 1, 2, 3, 4],
+  pendingWolf: null
 };
 
-// Migrate older saved rounds (single manual course, raw course handicaps).
+// Migrations for older saved rounds.
 if (!state.courses) {
   const migrated = makeDefaultCourse();
   if (state.course) migrated.holes = state.course;
@@ -68,8 +72,6 @@ if (!state.bets.smallStake) state.bets.smallStake = 15;
 if (!state.bets.bigStake) state.bets.bigStake = 10;
 if (!state.holes) state.holes = {};
 if (!state.dayHoles) state.dayHoles = {};
-
-// Migrate older saved rounds (no roster yet) — seed the roster from today's 5 players.
 if (!state.roster) {
   state.roster = state.players.map((name, i) => ({
     id: 'roster_' + i + '_' + Date.now(),
@@ -79,6 +81,10 @@ if (!state.roster) {
   state.playerRosterId = state.roster.map(r => r.id);
 }
 if (!state.playerRosterId) state.playerRosterId = [null, null, null, null, null];
+if (state.roundStarted === undefined) state.roundStarted = false;
+if (!state.currentHole) state.currentHole = 1;
+if (!state.wolfOrder) state.wolfOrder = [0, 1, 2, 3, 4];
+if (state.pendingWolf === undefined) state.pendingWolf = null;
 
 function loadState() {
   try {
@@ -94,8 +100,9 @@ function saveState() {
 function activeCourse() {
   return state.courses.find(c => c.id === state.activeCourseId) || state.courses[0];
 }
-function coursePar() {
-  return activeCourse().holes.reduce((sum, h) => sum + (Number(h.par) || 0), 0);
+function coursePar(course) {
+  course = course || activeCourse();
+  return course.holes.reduce((sum, h) => sum + (Number(h.par) || 0), 0);
 }
 function activeTee(playerIdx) {
   const course = activeCourse();
@@ -129,69 +136,113 @@ function holeHasScores(hole) {
   return state.players.every((_, i) => h.scores[i] !== undefined && h.scores[i] !== '');
 }
 
-/* ---------- Tabs ---------- */
-document.getElementById('tabs').addEventListener('click', (e) => {
-  const btn = e.target.closest('.tab');
-  if (!btn) return;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById(btn.dataset.tab).classList.add('active');
-  renderAll();
+/* ---------- Screen navigation ---------- */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+function updateRoundBar() {
+  const bar = document.getElementById('roundBar');
+  if (state.roundStarted) {
+    bar.style.display = 'flex';
+    document.getElementById('holeIndicator').textContent = `Hole ${state.currentHole}`;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+document.getElementById('startRoundBtn').addEventListener('click', () => {
+  showScreen('scrCourse');
+  renderCourseCardList();
 });
 
-/* ---------- Setup rendering ---------- */
-function renderSetup() {
-  renderCourseSelect();
+/* ---------- STEP 1: Course selection & library ---------- */
+let addingNewCourseId = null;
+
+function renderCourseCardList() {
+  const list = document.getElementById('courseCardList');
+  list.innerHTML = state.courses.map(c => `
+    <div class="course-card ${c.id === state.activeCourseId ? 'selected' : ''}" data-id="${c.id}">
+      <div>
+        <div class="course-card-name">${c.name}</div>
+        <div class="hint">Par ${coursePar(c)}, ${c.tees.length} tee${c.tees.length === 1 ? '' : 's'}</div>
+      </div>
+      <span class="course-card-edit" data-edit="${c.id}">Edit</span>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.course-card').forEach(el => el.addEventListener('click', e => {
+    if (e.target.closest('.course-card-edit')) return;
+    state.activeCourseId = el.dataset.id;
+    saveState();
+    renderCourseCardList();
+    document.getElementById('courseContinueBtn').disabled = false;
+  }));
+  list.querySelectorAll('.course-card-edit').forEach(el => el.addEventListener('click', e => {
+    e.stopPropagation();
+    openCourseEditor(el.dataset.edit, false);
+  }));
+
+  document.getElementById('courseContinueBtn').disabled = !state.activeCourseId;
+}
+
+function openCourseEditor(courseId, isNew) {
+  state.activeCourseId = courseId;
+  addingNewCourseId = isNew ? courseId : null;
+  document.getElementById('courseEditorTitle').textContent = isNew ? 'Add Course' : 'Edit Course';
+  document.getElementById('courseNameInput').value = activeCourse().name;
+  document.getElementById('deleteCourseBtn').style.display = isNew ? 'none' : 'inline-block';
   renderCourseHoleTable();
   renderTeeTable();
-  renderRosterTable();
-  renderPlayerTable();
-
-  document.getElementById('smallStake').value = state.bets.smallStake;
-  document.getElementById('bigStake').value = state.bets.bigStake;
-  document.getElementById('matchUnit').value = state.bets.matchUnit;
+  document.getElementById('courseEditorCard').style.display = 'block';
 }
 
-function renderCourseSelect() {
-  const sel = document.getElementById('courseSelect');
-  sel.innerHTML = state.courses.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-  sel.value = state.activeCourseId;
-}
-document.getElementById('courseSelect').addEventListener('change', e => {
-  state.activeCourseId = e.target.value;
-  state.playerTeeIdx = state.playerTeeIdx.map(() => 0);
-  saveState();
-  renderSetup();
-});
-document.getElementById('newCourseBtn').addEventListener('click', () => {
-  const name = prompt('New course name:', 'New Course');
-  if (!name) return;
+document.getElementById('addCourseBtn').addEventListener('click', () => {
   const id = 'course_' + Date.now();
   state.courses.push({
-    id, name,
+    id,
+    name: 'New Course',
     holes: Array.from({length: 18}, (_, i) => ({ par: 4, si: i + 1 })),
     tees: [{ name: 'White', rating: 72.0, slope: 113 }]
   });
-  state.activeCourseId = id;
   saveState();
-  renderSetup();
+  openCourseEditor(id, true);
 });
-document.getElementById('renameCourseBtn').addEventListener('click', () => {
-  const course = activeCourse();
-  const name = prompt('Rename course:', course.name);
-  if (!name) return;
-  course.name = name;
+
+document.getElementById('courseNameInput').addEventListener('input', e => {
+  activeCourse().name = e.target.value || 'New Course';
   saveState();
-  renderSetup();
 });
+
+document.getElementById('saveCourseBtn').addEventListener('click', () => {
+  addingNewCourseId = null;
+  document.getElementById('courseEditorCard').style.display = 'none';
+  renderCourseCardList();
+});
+
+document.getElementById('cancelCourseBtn').addEventListener('click', () => {
+  if (addingNewCourseId) {
+    state.courses = state.courses.filter(c => c.id !== addingNewCourseId);
+    if (state.activeCourseId === addingNewCourseId) {
+      state.activeCourseId = state.courses[0] ? state.courses[0].id : null;
+    }
+    addingNewCourseId = null;
+    saveState();
+  }
+  document.getElementById('courseEditorCard').style.display = 'none';
+  renderCourseCardList();
+});
+
 document.getElementById('deleteCourseBtn').addEventListener('click', () => {
   if (state.courses.length <= 1) { alert('You need at least one course.'); return; }
   if (!confirm(`Delete "${activeCourse().name}"?`)) return;
   state.courses = state.courses.filter(c => c.id !== state.activeCourseId);
   state.activeCourseId = state.courses[0].id;
   saveState();
-  renderSetup();
+  document.getElementById('courseEditorCard').style.display = 'none';
+  renderCourseCardList();
 });
 
 function renderCourseHoleTable() {
@@ -210,7 +261,6 @@ function renderCourseHoleTable() {
   ctBody.querySelectorAll('.holePar').forEach(el => el.addEventListener('input', e => {
     course.holes[e.target.dataset.idx].par = Number(e.target.value) || 4;
     saveState();
-    renderPlayerTable();
   }));
   ctBody.querySelectorAll('.holeSi').forEach(el => el.addEventListener('input', e => {
     course.holes[e.target.dataset.idx].si = Number(e.target.value) || 1;
@@ -235,40 +285,44 @@ function renderTeeTable() {
   ttBody.querySelectorAll('.teeName').forEach(el => el.addEventListener('input', e => {
     course.tees[e.target.dataset.idx].name = e.target.value || 'Tee';
     saveState();
-    renderPlayerTable();
   }));
   ttBody.querySelectorAll('.teeRating').forEach(el => el.addEventListener('input', e => {
     course.tees[e.target.dataset.idx].rating = Number(e.target.value) || 0;
     saveState();
-    renderPlayerTable();
   }));
   ttBody.querySelectorAll('.teeSlope').forEach(el => el.addEventListener('input', e => {
     course.tees[e.target.dataset.idx].slope = Number(e.target.value) || 113;
     saveState();
-    renderPlayerTable();
   }));
   ttBody.querySelectorAll('.removeTee').forEach(el => el.addEventListener('click', e => {
     if (course.tees.length <= 1) return;
     course.tees.splice(Number(e.target.dataset.idx), 1);
     state.playerTeeIdx = state.playerTeeIdx.map(idx => Math.min(idx, course.tees.length - 1));
     saveState();
-    renderSetup();
+    renderTeeTable();
   }));
 }
 document.getElementById('addTeeBtn').addEventListener('click', () => {
   activeCourse().tees.push({ name: 'New Tee', rating: 72.0, slope: 113 });
   saveState();
-  renderSetup();
+  renderTeeTable();
 });
 
-/* ---------- Player Roster ---------- */
+document.getElementById('courseContinueBtn').addEventListener('click', () => {
+  if (!state.activeCourseId) return;
+  showScreen('scrPlayers');
+  renderRosterTable();
+  renderPlayerTable();
+});
+
+/* ---------- STEP 2: Player Roster & today's players ---------- */
 function rosterById(id) {
   return state.roster.find(r => r.id === id);
 }
 function renderRosterTable() {
   const body = document.querySelector('#rosterTable tbody');
   body.innerHTML = '';
-  state.roster.forEach((r, i) => {
+  state.roster.forEach(r => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" data-id="${r.id}" class="rosterName" value="${r.name}"></td>
@@ -295,7 +349,8 @@ function renderRosterTable() {
     state.roster = state.roster.filter(r => r.id !== id);
     state.playerRosterId = state.playerRosterId.map(rid => rid === id ? null : rid);
     saveState();
-    renderSetup();
+    renderRosterTable();
+    renderPlayerTable();
   }));
 }
 document.getElementById('addRosterBtn').addEventListener('click', () => {
@@ -305,7 +360,8 @@ document.getElementById('addRosterBtn').addEventListener('click', () => {
   const hi = Number(hiRaw) || 0;
   state.roster.push({ id: 'roster_' + Date.now(), name, handicapIndex: hi });
   saveState();
-  renderSetup();
+  renderRosterTable();
+  renderPlayerTable();
 });
 
 function renderPlayerTable() {
@@ -337,7 +393,7 @@ function renderPlayerTable() {
         state.handicapIndex[idx] = r.handicapIndex;
       }
       saveState();
-      renderAll();
+      renderPlayerTable();
     });
   });
   ptBody.querySelectorAll('.playerName').forEach(el => el.addEventListener('input', e => {
@@ -345,7 +401,7 @@ function renderPlayerTable() {
     state.players[idx] = e.target.value || `Player ${idx + 1}`;
     const rid = state.playerRosterId[idx];
     if (rid) rosterById(rid).name = state.players[idx];
-    saveState(); renderAll();
+    saveState();
   }));
   ptBody.querySelectorAll('.playerHcp').forEach(el => el.addEventListener('input', e => {
     const idx = Number(e.target.dataset.idx);
@@ -365,91 +421,88 @@ function renderPlayerTable() {
   });
 }
 
+document.getElementById('playersBackBtn').addEventListener('click', () => {
+  showScreen('scrCourse');
+  renderCourseCardList();
+});
+document.getElementById('playersContinueBtn').addEventListener('click', () => {
+  showScreen('scrBets');
+  document.getElementById('smallStake').value = state.bets.smallStake;
+  document.getElementById('bigStake').value = state.bets.bigStake;
+  document.getElementById('matchUnit').value = state.bets.matchUnit;
+});
+
+/* ---------- STEP 3: Bets ---------- */
 document.getElementById('smallStake').addEventListener('input', e => { state.bets.smallStake = Number(e.target.value) || 0; saveState(); });
 document.getElementById('bigStake').addEventListener('input', e => { state.bets.bigStake = Number(e.target.value) || 0; saveState(); });
 document.getElementById('matchUnit').addEventListener('input', e => { state.bets.matchUnit = Number(e.target.value) || 0; saveState(); });
 
-document.getElementById('resetRound').addEventListener('click', () => {
-  if (!confirm('This clears all scores, teams, and results for the round (course library and players stay). Continue?')) return;
-  const names = state.players, handicapIndex = state.handicapIndex, playerTeeIdx = state.playerTeeIdx;
-  const playerRosterId = state.playerRosterId, roster = state.roster;
-  const courses = state.courses, activeCourseId = state.activeCourseId, bets = state.bets;
-  state = { players: names, handicapIndex, playerTeeIdx, playerRosterId, roster, courses, activeCourseId, bets, holes: {}, wolfHoles: {}, dayHoles: {} };
-  saveState();
-  renderAll();
+document.getElementById('betsBackBtn').addEventListener('click', () => {
+  showScreen('scrPlayers');
+  renderRosterTable();
+  renderPlayerTable();
 });
 
-/* ---------- SCORECARD ---------- */
-function renderScorecardInputs() {
-  const hole = Number(document.getElementById('scHole').value) || 1;
-  const existing = state.holes[hole];
-  document.getElementById('scPar').textContent = `Par ${activeCourse().holes[hole - 1].par}, Stroke Index ${activeCourse().holes[hole - 1].si}`;
-  const grid = document.getElementById('scScores');
-  grid.innerHTML = state.players.map((p, i) => `
-    <div>
-      <label for="scScore${i}">${p}</label>
-      <input type="number" id="scScore${i}" min="1" value="${existing && existing.scores[i] !== undefined ? existing.scores[i] : ''}">
+document.getElementById('beginRoundBtn').addEventListener('click', () => {
+  state.roundStarted = true;
+  if (!state.currentHole) state.currentHole = 1;
+  if (!state.wolfOrder) state.wolfOrder = [0, 1, 2, 3, 4];
+  saveState();
+  updateRoundBar();
+  renderHoleSetup();
+  showScreen('scrHoleSetup');
+});
+
+/* ---------- Hole Setup (once, at round start) ---------- */
+function renderHoleSetup() {
+  document.getElementById('startHoleInput').value = state.currentHole || 1;
+  const wrap = document.getElementById('wolfOrderList');
+  wrap.innerHTML = state.players.map((_, pos) => `
+    <div class="wolf-order-row">
+      <span class="wolf-order-num">${pos + 1}.</span>
+      <select data-pos="${pos}" class="wolfOrderSel">
+        ${state.players.map((p, pi) => `<option value="${pi}">${p}</option>`).join('')}
+      </select>
     </div>
   `).join('');
-}
-document.getElementById('scHole').addEventListener('input', renderScorecardInputs);
-
-document.getElementById('scSubmit').addEventListener('click', () => {
-  const hole = Number(document.getElementById('scHole').value) || 1;
-  const scores = {};
-  let missing = false;
-  state.players.forEach((_, i) => {
-    const v = document.getElementById(`scScore${i}`).value;
-    if (v === '') missing = true;
-    scores[i] = v;
+  wrap.querySelectorAll('.wolfOrderSel').forEach(el => {
+    const pos = Number(el.dataset.pos);
+    el.value = state.wolfOrder[pos] !== undefined ? state.wolfOrder[pos] : pos;
   });
-  if (missing) { alert('Enter gross scores for all 5 players.'); return; }
-  state.holes[hole] = { scores };
+}
+document.getElementById('holeSetupContinueBtn').addEventListener('click', () => {
+  state.currentHole = Number(document.getElementById('startHoleInput').value) || 1;
+  const sels = document.querySelectorAll('.wolfOrderSel');
+  state.wolfOrder = Array.from(sels).map(el => Number(el.value));
   saveState();
-  renderAll();
+  updateRoundBar();
+  prepareTeeShotScreen();
+  showScreen('scrTeeShot');
 });
 
-function renderScorecardSummary() {
-  const holes = Object.keys(state.holes).map(Number).filter(holeHasScores).sort((a, b) => a - b);
-  const el = document.getElementById('scSummary');
-  if (holes.length === 0) { el.innerHTML = '<p class="hint">No holes entered yet.</p>'; return; }
-  el.innerHTML = `<table class="totals-table"><thead><tr><th>Hole</th>${state.players.map(p => `<th>${p}</th>`).join('')}</tr></thead><tbody>${
-    holes.map(h => `<tr><td>${h}</td>${state.players.map((_, i) => `<td>${state.holes[h].scores[i]}</td>`).join('')}</tr>`).join('')
-  }</tbody></table>`;
-}
-
-/* ---------- WOLF ---------- */
-function wolfOrderForHole(hole) {
-  return (hole - 1) % NUM_PLAYERS;
-}
-
-function renderWolfInputs() {
-  const hole = Number(document.getElementById('wolfHole').value) || 1;
+/* ---------- Post Tee Shot ---------- */
+function prepareTeeShotScreen() {
+  const hole = state.currentHole;
+  document.getElementById('teeShotTitle').textContent = `Hole ${hole} — Post Tee Shot`;
   const wolfSel = document.getElementById('wolfPlayer');
   wolfSel.innerHTML = state.players.map((p, i) => `<option value="${i}">${p}</option>`).join('');
 
-  const hintEl = document.getElementById('wolfScoreHint');
-  if (!holeHasScores(hole)) {
-    hintEl.textContent = `No scores yet for hole ${hole} — enter them on the Scorecard tab first.`;
-  } else {
-    hintEl.textContent = `Scores loaded for hole ${hole}: ` + state.players.map((p, i) => `${p} ${state.holes[hole].scores[i]}`).join(', ');
-  }
-
-  const suggested = wolfOrderForHole(hole);
+  const shift = (hole - 1) % NUM_PLAYERS;
+  const teeOrder = state.wolfOrder.slice(shift).concat(state.wolfOrder.slice(0, shift));
+  const suggested = teeOrder[0];
   const existing = state.wolfHoles[hole];
   wolfSel.value = existing ? existing.wolf : suggested;
-  document.getElementById('wolfOrderHint').textContent = `Suggested rotation: ${state.players[suggested]} is wolf this hole.`;
+  document.getElementById('wolfOrderHint').innerHTML = `<b>Hole ${hole} tee order:</b><br>` +
+    teeOrder.map((p, i) => `${i + 1}. ${state.players[p]}${i === 0 ? ' (wolf)' : ''}`).join('<br>');
 
   updateWolfPartnerOptions();
   document.getElementById('wolfMode').value = existing ? existing.mode : 'partner';
   document.getElementById('wolfHammers').value = existing ? existing.hammers : 0;
-  document.getElementById('wolfTrashA').value = existing ? (existing.trashA || 0) : 0;
-  document.getElementById('wolfTrashB').value = existing ? (existing.trashB || 0) : 0;
   toggleWolfPartnerVisibility();
-
   if (existing && existing.partner !== null && existing.partner !== undefined) {
     document.getElementById('wolfPartner').value = existing.partner;
   }
+  updateRoundBar();
 }
 function updateWolfPartnerOptions() {
   const wolfIdx = Number(document.getElementById('wolfPlayer').value);
@@ -463,32 +516,99 @@ function updateWolfPartnerOptions() {
 function toggleWolfPartnerVisibility() {
   const mode = document.getElementById('wolfMode').value;
   document.getElementById('wolfPartnerWrap').style.display = mode === 'partner' ? 'block' : 'none';
-  document.getElementById('wolfTrashALabel').childNodes[0].textContent = mode === 'partner'
-    ? 'Trash won by small team (wolf + partner) '
-    : 'Trash won by wolf ';
-  document.getElementById('wolfTrashBLabel').childNodes[0].textContent = mode === 'partner'
-    ? 'Trash won by big team (other 3) '
-    : 'Trash won by the other 4 ';
 }
-document.getElementById('wolfHole').addEventListener('input', renderWolfInputs);
 document.getElementById('wolfPlayer').addEventListener('change', updateWolfPartnerOptions);
 document.getElementById('wolfMode').addEventListener('change', toggleWolfPartnerVisibility);
 
-document.getElementById('wolfSubmit').addEventListener('click', () => {
-  const hole = Number(document.getElementById('wolfHole').value) || 1;
-  if (!holeHasScores(hole)) { alert('Enter gross scores for this hole on the Scorecard tab first.'); return; }
+function randomizeDaytonaForHole(hole) {
+  const idxs = state.players.map((_, i) => i);
+  for (let i = idxs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
+  }
+  state.dayHoles[hole] = { teamOf2: idxs.slice(0, 2), teamOf3: idxs.slice(2, 5) };
+}
+
+document.getElementById('teeShotContinueBtn').addEventListener('click', () => {
+  const hole = state.currentHole;
   const wolf = Number(document.getElementById('wolfPlayer').value);
   const mode = document.getElementById('wolfMode').value;
   const partner = mode === 'partner' ? Number(document.getElementById('wolfPartner').value) : null;
   const hammers = Number(document.getElementById('wolfHammers').value) || 0;
-  const trashA = Number(document.getElementById('wolfTrashA').value) || 0;
-  const trashB = Number(document.getElementById('wolfTrashB').value) || 0;
-
-  state.wolfHoles[hole] = { wolf, mode, partner, hammers, trashA, trashB };
+  state.pendingWolf = { wolf, mode, partner, hammers };
+  if (!state.dayHoles[hole] || !state.dayHoles[hole].teamOf2) {
+    randomizeDaytonaForHole(hole);
+  }
   saveState();
-  renderWolf();
+  prepareEnterScoresScreen();
+  showScreen('scrEnterScores');
 });
 
+/* ---------- Enter Scores ---------- */
+function prepareEnterScoresScreen() {
+  const hole = state.currentHole;
+  const course = activeCourse();
+  document.getElementById('enterScoresTitle').textContent = `Hole ${hole} — Enter Scores`;
+  document.getElementById('holeParHint').textContent = `Par ${course.holes[hole - 1].par}, Stroke Index ${course.holes[hole - 1].si}`;
+
+  const pw = state.pendingWolf || {};
+  const isPartner = pw.mode === 'partner';
+  const wolfTeamNames = isPartner
+    ? `${state.players[pw.wolf]} & ${state.players[pw.partner]}`
+    : `${state.players[pw.wolf]} (lone wolf)`;
+  const oppNames = state.players.filter((_, i) => i !== pw.wolf && (!isPartner || i !== pw.partner)).join(', ');
+  document.getElementById('wolfTeamsRef').innerHTML = `<b>Wolf:</b> ${wolfTeamNames} vs ${oppNames}${pw.hammers ? ` — hammers: ${pw.hammers}` : ''}`;
+
+  const day = state.dayHoles[hole];
+  if (day) {
+    document.getElementById('daytonaTeamsRef').innerHTML = `<b>Daytona:</b> ${day.teamOf2.map(i => state.players[i]).join(' & ')} (2) vs ${day.teamOf3.map(i => state.players[i]).join(', ')} (3, best+worst count)`;
+  }
+
+  document.getElementById('holeTrashALabel').childNodes[0].textContent = isPartner
+    ? 'Trash won by small team (wolf + partner) '
+    : 'Trash won by wolf ';
+  document.getElementById('holeTrashBLabel').childNodes[0].textContent = isPartner
+    ? 'Trash won by big team (other 3) '
+    : 'Trash won by the other 4 ';
+
+  const existingHole = state.holes[hole];
+  const grid = document.getElementById('holeScores');
+  grid.innerHTML = state.players.map((p, i) => `
+    <div>
+      <label for="holeScore${i}">${p}</label>
+      <input type="number" id="holeScore${i}" min="1" value="${existingHole && existingHole.scores[i] !== undefined ? existingHole.scores[i] : ''}">
+    </div>
+  `).join('');
+
+  const existingWolfHole = state.wolfHoles[hole];
+  document.getElementById('holeTrashA').value = existingWolfHole ? (existingWolfHole.trashA || 0) : 0;
+  document.getElementById('holeTrashB').value = existingWolfHole ? (existingWolfHole.trashB || 0) : 0;
+
+  updateRoundBar();
+}
+
+document.getElementById('submitHoleBtn').addEventListener('click', () => {
+  const hole = state.currentHole;
+  const scores = {};
+  let missing = false;
+  state.players.forEach((_, i) => {
+    const v = document.getElementById(`holeScore${i}`).value;
+    if (v === '') missing = true;
+    scores[i] = v;
+  });
+  if (missing) { alert('Enter gross scores for all 5 players.'); return; }
+
+  state.holes[hole] = { scores };
+  const pw = state.pendingWolf || { wolf: 0, mode: 'partner', partner: 1, hammers: 0 };
+  const trashA = Number(document.getElementById('holeTrashA').value) || 0;
+  const trashB = Number(document.getElementById('holeTrashB').value) || 0;
+  state.wolfHoles[hole] = { wolf: pw.wolf, mode: pw.mode, partner: pw.partner, hammers: pw.hammers, trashA, trashB };
+  saveState();
+  prepareHoleSummary(hole);
+  showScreen('scrHoleSummary');
+});
+
+/* ---------- Wolf math ---------- */
 function computeWolfHole(hole, data) {
   const { wolf, mode, partner, hammers, trashA, trashB } = data;
   const scores = state.holes[hole].scores;
@@ -497,11 +617,11 @@ function computeWolfHole(hole, data) {
 
   let teamA, teamB, isPartner;
   if (mode === 'partner') {
-    teamA = [wolf, partner];               // small team, $/man = smallStake
-    teamB = state.players.map((_, i) => i).filter(i => i !== wolf && i !== partner); // big team
+    teamA = [wolf, partner];
+    teamB = state.players.map((_, i) => i).filter(i => i !== wolf && i !== partner);
     isPartner = true;
   } else {
-    teamA = [wolf];                        // lone wolf
+    teamA = [wolf];
     teamB = state.players.map((_, i) => i).filter(i => i !== wolf);
     isPartner = false;
   }
@@ -522,12 +642,9 @@ function computeWolfHole(hole, data) {
     if (!tie) {
       if (aBest < bBest) { winners = teamA; losers = teamB; }
       else { winners = teamB; losers = teamA; }
-    }
-    if (!tie) {
       teamA.forEach(i => { payouts[i] += (winners === teamA ? rateA : -rateA); });
       teamB.forEach(i => { payouts[i] += (winners === teamB ? rateB : -rateB); });
     }
-    // Trash: winning side's team gets its own rate, losing side's team loses its own rate, per trash
     for (let k = 0; k < trashA; k++) {
       teamA.forEach(i => { payouts[i] += state.bets.smallStake; });
       teamB.forEach(i => { payouts[i] -= state.bets.bigStake; });
@@ -537,7 +654,6 @@ function computeWolfHole(hole, data) {
       teamA.forEach(i => { payouts[i] -= state.bets.smallStake; });
     }
   } else {
-    // Lone wolf: flat big-team rate for everyone, pairwise (loser pays each winner)
     const rate = state.bets.bigStake * multiplier;
     if (!tie) {
       if (aBest < bBest) { winners = teamA; losers = teamB; }
@@ -558,80 +674,24 @@ function computeWolfHole(hole, data) {
   return { nets, teamA, teamB, aBest, bBest, tie, winners, losers, multiplier, payouts, birdieCount, isPartner };
 }
 
-function renderWolf() {
-  renderWolfInputs();
-  const results = document.getElementById('wolfResults');
-  const holes = Object.keys(state.wolfHoles).map(Number).filter(h => holeHasScores(h)).sort((a, b) => a - b);
-  if (holes.length === 0) { results.innerHTML = '<p class="hint">No holes recorded yet.</p>'; }
+function formatWolfHoleResult(hole, data) {
+  const r = computeWolfHole(hole, data);
+  const wolfName = state.players[data.wolf];
+  const modeLabel = data.mode === 'partner' ? `w/ ${state.players[data.partner]}` : (data.mode === 'lone' ? '(voluntary lone wolf)' : '(forced lone wolf)');
+  let outcome;
+  if (r.tie) outcome = `Push — tied at net ${r.aBest}.`;
   else {
-    results.innerHTML = holes.map(h => {
-      const data = state.wolfHoles[h];
-      const r = computeWolfHole(h, data);
-      const wolfName = state.players[data.wolf];
-      const modeLabel = data.mode === 'partner' ? `w/ ${state.players[data.partner]}` : (data.mode === 'lone' ? '(voluntary lone wolf)' : '(forced lone wolf)');
-      let outcome;
-      if (r.tie) outcome = `Push — tied at net ${r.aBest}.`;
-      else {
-        const winNames = r.winners.map(i => state.players[i]).join(' & ');
-        outcome = `<span class="win-text">${winNames} win the hole</span> (net ${Math.min(r.aBest, r.bBest)} beats ${Math.max(r.aBest, r.bBest)}, hammers: ${data.hammers}${r.birdieCount > 0 ? `, gross birdies: ${r.birdieCount}` : ''}, bet multiplier x${r.multiplier})`;
-      }
-      const trashNote = (data.trashA || data.trashB)
-        ? `<br><span class="hint">Trash: ${data.trashA || 0} to ${data.mode === 'partner' ? 'small team' : 'wolf'}, ${data.trashB || 0} to ${data.mode === 'partner' ? 'big team' : 'the other 4'}</span>`
-        : '';
-      return `<div class="result-row"><b>Hole ${h}</b>: ${wolfName} is wolf ${modeLabel}<br>${outcome}${trashNote}</div>`;
-    }).join('');
+    const winNames = r.winners.map(i => state.players[i]).join(' & ');
+    outcome = `<span class="win-text">${winNames} win the hole</span> (net ${Math.min(r.aBest, r.bBest)} beats ${Math.max(r.aBest, r.bBest)}, hammers: ${data.hammers}${r.birdieCount > 0 ? `, gross birdies: ${r.birdieCount}` : ''}, bet multiplier x${r.multiplier})`;
   }
-
-  const totals = document.getElementById('wolfTotals');
-  const sums = state.players.map(() => 0);
-  holes.forEach(h => {
-    const r = computeWolfHole(h, state.wolfHoles[h]);
-    r.payouts.forEach((p, i) => sums[i] += p);
-  });
-  totals.innerHTML = `<table class="totals-table">${state.players.map((p, i) => `<tr><td>${p}</td><td class="${sums[i] >= 0 ? 'money-pos' : 'money-neg'}">${sums[i] >= 0 ? '+' : ''}$${sums[i].toFixed(2)}</td></tr>`).join('')}</table>`;
+  const trashNote = (data.trashA || data.trashB)
+    ? `<br><span class="hint">Trash: ${data.trashA || 0} to ${data.mode === 'partner' ? 'small team' : 'wolf'}, ${data.trashB || 0} to ${data.mode === 'partner' ? 'big team' : 'the other 4'}</span>`
+    : '';
+  const payoutLine = state.players.map((p, i) => `${p} ${r.payouts[i] >= 0 ? '+' : ''}$${r.payouts[i].toFixed(2)}`).join(', ');
+  return `<div class="result-row"><b>Hole ${hole}</b>: ${wolfName} is wolf ${modeLabel}<br>${outcome}${trashNote}<br><span class="hint">${payoutLine}</span></div>`;
 }
 
-/* ---------- DAYTONA ---------- */
-function renderDaytonaInputs() {
-  const hole = Number(document.getElementById('dayHole').value) || 1;
-  const existing = state.dayHoles[hole];
-
-  const hintEl = document.getElementById('dayScoreHint');
-  if (!holeHasScores(hole)) {
-    hintEl.textContent = `No scores yet for hole ${hole} — enter them on the Scorecard tab first.`;
-  } else {
-    hintEl.textContent = `Scores loaded for hole ${hole}: ` + state.players.map((p, i) => `${p} ${state.holes[hole].scores[i]}`).join(', ');
-  }
-
-  const display = document.getElementById('dayTeamsDisplay');
-  if (existing && existing.teamOf2) {
-    display.innerHTML = `Team A (2, $${state.bets.smallStake}/man): <b>${existing.teamOf2.map(i => state.players[i]).join(' & ')}</b><br>Team B (3, $${state.bets.bigStake}/man, best+worst count): <b>${existing.teamOf3.map(i => state.players[i]).join(', ')}</b>`;
-  } else {
-    display.textContent = 'Click "Randomize Teams" to assign teams for this hole.';
-  }
-}
-document.getElementById('dayHole').addEventListener('input', renderDaytonaInputs);
-
-document.getElementById('dayRandomize').addEventListener('click', () => {
-  const hole = Number(document.getElementById('dayHole').value) || 1;
-  const idxs = state.players.map((_, i) => i);
-  for (let i = idxs.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
-  }
-  state.dayHoles[hole] = { teamOf2: idxs.slice(0, 2), teamOf3: idxs.slice(2, 5) };
-  saveState();
-  renderDaytonaInputs();
-});
-
-document.getElementById('dayCompute').addEventListener('click', () => {
-  const hole = Number(document.getElementById('dayHole').value) || 1;
-  if (!holeHasScores(hole)) { alert('Enter gross scores for this hole on the Scorecard tab first.'); return; }
-  if (!state.dayHoles[hole] || !state.dayHoles[hole].teamOf2) { alert('Randomize teams for this hole first.'); return; }
-  saveState();
-  renderDaytona();
-});
-
+/* ---------- Daytona math ---------- */
 function computeDaytonaHole(hole, data) {
   const scores = state.holes[hole].scores;
   const nets = state.players.map((_, i) => netScore(i, hole, scores[i]));
@@ -674,39 +734,23 @@ function computeDaytonaHole(hole, data) {
   return { nets, numA, numB, diff, rate, money, payouts, teamABirdied, teamBBirdied, flippedA, flippedB };
 }
 
-function renderDaytona() {
-  renderDaytonaInputs();
-  const results = document.getElementById('dayResults');
-  const holes = Object.keys(state.dayHoles).map(Number).filter(h => state.dayHoles[h].teamOf2 && holeHasScores(h)).sort((a, b) => a - b);
-  if (holes.length === 0) { results.innerHTML = '<p class="hint">No holes recorded yet.</p>'; }
-  else {
-    results.innerHTML = holes.map(h => {
-      const data = state.dayHoles[h];
-      const r = computeDaytonaHole(h, data);
-      const teamAName = data.teamOf2.map(i => state.players[i]).join(' & ');
-      const teamBName = data.teamOf3.map(i => state.players[i]).join(', ');
-      let outcome;
-      if (r.numA === r.numB) outcome = `Push — both ${r.numA}.`;
-      else if (r.numA < r.numB) outcome = `<span class="win-text">${teamAName} win $${r.money.toFixed(2)}</span> (${r.numA} vs ${r.numB}, $${r.rate}/pt)`;
-      else outcome = `<span class="win-text">${teamBName} win $${r.money.toFixed(2)}</span> (${r.numB} vs ${r.numA}, $${r.rate}/pt)`;
-      const flipNote = [
-        r.flippedA ? `${teamBName} birdied — ${teamAName}'s number flipped` : '',
-        r.flippedB ? `${teamAName} birdied — ${teamBName}'s number flipped` : ''
-      ].filter(Boolean).join('; ');
-      return `<div class="result-row"><b>Hole ${h}</b>: ${teamAName} (2) vs ${teamBName} (3)<br>${outcome}${flipNote ? `<br><span class="hint">${flipNote}</span>` : ''}</div>`;
-    }).join('');
-  }
-
-  const totals = document.getElementById('dayTotals');
-  const sums = state.players.map(() => 0);
-  holes.forEach(h => {
-    const r = computeDaytonaHole(h, state.dayHoles[h]);
-    r.payouts.forEach((p, i) => sums[i] += p);
-  });
-  totals.innerHTML = `<table class="totals-table">${state.players.map((p, i) => `<tr><td>${p}</td><td class="${sums[i] >= 0 ? 'money-pos' : 'money-neg'}">${sums[i] >= 0 ? '+' : ''}$${sums[i].toFixed(2)}</td></tr>`).join('')}</table>`;
+function formatDaytonaHoleResult(hole, data) {
+  const r = computeDaytonaHole(hole, data);
+  const teamAName = data.teamOf2.map(i => state.players[i]).join(' & ');
+  const teamBName = data.teamOf3.map(i => state.players[i]).join(', ');
+  let outcome;
+  if (r.numA === r.numB) outcome = `Push — both ${r.numA}.`;
+  else if (r.numA < r.numB) outcome = `<span class="win-text">${teamAName} win $${r.money.toFixed(2)}</span> (${r.numA} vs ${r.numB}, $${r.rate}/pt)`;
+  else outcome = `<span class="win-text">${teamBName} win $${r.money.toFixed(2)}</span> (${r.numB} vs ${r.numA}, $${r.rate}/pt)`;
+  const flipNote = [
+    r.flippedA ? `${teamBName} birdied — ${teamAName}'s number flipped` : '',
+    r.flippedB ? `${teamAName} birdied — ${teamBName}'s number flipped` : ''
+  ].filter(Boolean).join('; ');
+  const payoutLine = state.players.map((p, i) => `${p} ${r.payouts[i] >= 0 ? '+' : ''}$${r.payouts[i].toFixed(2)}`).join(', ');
+  return `<div class="result-row"><b>Hole ${hole}</b>: ${teamAName} (2) vs ${teamBName} (3)<br>${outcome}${flipNote ? `<br><span class="hint">${flipNote}</span>` : ''}<br><span class="hint">${payoutLine}</span></div>`;
 }
 
-/* ---------- MATCH PLAY ---------- */
+/* ---------- Match Play math ---------- */
 function allPairs() {
   const pairs = [];
   for (let i = 0; i < NUM_PLAYERS; i++) {
@@ -714,13 +758,11 @@ function allPairs() {
   }
   return pairs;
 }
-
 function computeMatchStatuses() {
   const pairs = allPairs();
   const holes = Object.keys(state.holes).map(Number).filter(holeHasScores).sort((a, b) => a - b);
   const status = {};
   pairs.forEach(([i, j]) => { status[`${i}-${j}`] = { diff: 0, holesPlayed: 0 }; });
-
   holes.forEach(h => {
     const data = state.holes[h];
     const nets = state.players.map((_, idx) => netScore(idx, h, data.scores[idx]));
@@ -733,10 +775,32 @@ function computeMatchStatuses() {
   });
   return status;
 }
-
-function renderMatchplay() {
+function matchplayPayouts() {
   const status = computeMatchStatuses();
-  const container = document.getElementById('mpMatches');
+  const pairs = allPairs();
+  const sums = state.players.map(() => 0);
+  pairs.forEach(([i, j]) => {
+    const s = status[`${i}-${j}`];
+    const money = s.diff * state.bets.matchUnit;
+    sums[i] += money;
+    sums[j] -= money;
+  });
+  return sums;
+}
+function holeMatchResults(hole) {
+  const pairs = allPairs();
+  const data = state.holes[hole];
+  const nets = state.players.map((_, i) => netScore(i, hole, data.scores[i]));
+  return pairs.map(([i, j]) => {
+    let winner = null;
+    if (nets[i] < nets[j]) winner = i;
+    else if (nets[j] < nets[i]) winner = j;
+    return { i, j, winner };
+  });
+}
+function renderMatchplay(targetId) {
+  const status = computeMatchStatuses();
+  const container = document.getElementById(targetId);
   const pairs = allPairs();
   container.innerHTML = pairs.map(([i, j]) => {
     const s = status[`${i}-${j}`];
@@ -753,21 +817,8 @@ function renderMatchplay() {
   }).join('');
 }
 
-function matchplayPayouts() {
-  const status = computeMatchStatuses();
-  const pairs = allPairs();
-  const sums = state.players.map(() => 0);
-  pairs.forEach(([i, j]) => {
-    const s = status[`${i}-${j}`];
-    const money = s.diff * state.bets.matchUnit;
-    sums[i] += money;
-    sums[j] -= money;
-  });
-  return sums;
-}
-
-/* ---------- SUMMARY ---------- */
-function renderSummary() {
+/* ---------- Money Summary ---------- */
+function renderSummary(targetId) {
   const wolfSums = state.players.map(() => 0);
   Object.keys(state.wolfHoles).filter(h => holeHasScores(Number(h))).forEach(h => {
     const r = computeWolfHole(Number(h), state.wolfHoles[h]);
@@ -781,7 +832,6 @@ function renderSummary() {
   });
 
   const mpSums = matchplayPayouts();
-
   const totalSums = state.players.map((_, i) => wolfSums[i] + daySums[i] + mpSums[i]);
 
   const rows = state.players.map((p, i) => `
@@ -794,7 +844,7 @@ function renderSummary() {
     </tr>
   `).join('');
 
-  document.getElementById('summaryTable').innerHTML = `
+  document.getElementById(targetId).innerHTML = `
     <table class="totals-table">
       <thead><tr><th>Player</th><th>Wolf</th><th>Daytona</th><th>Match Play</th><th>Total</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -802,15 +852,153 @@ function renderSummary() {
   `;
 }
 
-/* ---------- Render All ---------- */
-function renderAll() {
-  renderSetup();
-  renderScorecardInputs();
-  renderScorecardSummary();
-  renderWolf();
-  renderDaytona();
-  renderMatchplay();
-  renderSummary();
+/* ---------- Hole Summary screen ---------- */
+function prepareHoleSummary(hole) {
+  document.getElementById('holeSummaryTitle').textContent = `Hole ${hole} Summary`;
+  document.getElementById('holeSummaryWolf').innerHTML = formatWolfHoleResult(hole, state.wolfHoles[hole]);
+  document.getElementById('holeSummaryDaytona').innerHTML = formatDaytonaHoleResult(hole, state.dayHoles[hole]);
+
+  const results = holeMatchResults(hole);
+  document.getElementById('holeSummaryMatches').innerHTML = results.map(r => {
+    const nameA = state.players[r.i], nameB = state.players[r.j];
+    const text = r.winner === null ? 'Halved' : `${state.players[r.winner]} wins the hole`;
+    return `<div class="match-card"><b>${nameA} vs ${nameB}</b>: ${text}</div>`;
+  }).join('');
+  updateRoundBar();
 }
 
-renderAll();
+document.getElementById('viewStandingsBtn').addEventListener('click', () => {
+  prepareStandings();
+  showScreen('scrStandings');
+});
+
+function prepareStandings() {
+  renderSummary('standingsSummary');
+  renderMatchplay('standingsMatches');
+}
+
+document.getElementById('standingsLink').addEventListener('click', () => {
+  prepareStandings();
+  showScreen('scrStandings');
+});
+
+document.getElementById('nextHoleBtn').addEventListener('click', () => {
+  state.currentHole = (state.currentHole || 1) + 1;
+  state.pendingWolf = null;
+  saveState();
+  prepareTeeShotScreen();
+  showScreen('scrTeeShot');
+});
+
+/* ---------- Full Data (old tabs, view/edit fallback) ---------- */
+document.getElementById('fullDataLink').addEventListener('click', () => {
+  document.getElementById('tabs').style.display = 'flex';
+  switchTab('setup');
+});
+document.getElementById('closeFullData').addEventListener('click', () => {
+  document.getElementById('tabs').style.display = 'none';
+  showScreen('scrTeeShot');
+  prepareTeeShotScreen();
+});
+document.getElementById('tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab');
+  if (!btn || btn.id === 'closeFullData') return;
+  switchTab(btn.dataset.tab);
+});
+function switchTab(tabId) {
+  document.querySelectorAll('#tabs .tab').forEach(t => t.classList.remove('active'));
+  const btn = document.querySelector(`#tabs .tab[data-tab="${tabId}"]`);
+  if (btn) btn.classList.add('active');
+  showScreen(tabId);
+  renderFullData();
+}
+function renderFullData() {
+  document.getElementById('setupCourseName').textContent = `Course: ${activeCourse().name}`;
+  document.getElementById('setupBetSummary').textContent = `Small team $${state.bets.smallStake}/man, Big team $${state.bets.bigStake}/man, Match Play $${state.bets.matchUnit}/hole`;
+
+  renderScorecardInputs();
+  renderScorecardSummary();
+
+  const wolfHoles = Object.keys(state.wolfHoles).map(Number).filter(h => holeHasScores(h)).sort((a, b) => a - b);
+  document.getElementById('wolfResults').innerHTML = wolfHoles.length
+    ? wolfHoles.map(h => formatWolfHoleResult(h, state.wolfHoles[h])).join('')
+    : '<p class="hint">No holes recorded yet.</p>';
+  const wolfSums = state.players.map(() => 0);
+  wolfHoles.forEach(h => { computeWolfHole(h, state.wolfHoles[h]).payouts.forEach((p, i) => wolfSums[i] += p); });
+  document.getElementById('wolfTotals').innerHTML = `<table class="totals-table">${state.players.map((p, i) => `<tr><td>${p}</td><td class="${wolfSums[i] >= 0 ? 'money-pos' : 'money-neg'}">${wolfSums[i] >= 0 ? '+' : ''}$${wolfSums[i].toFixed(2)}</td></tr>`).join('')}</table>`;
+
+  const dayHoles = Object.keys(state.dayHoles).map(Number).filter(h => state.dayHoles[h].teamOf2 && holeHasScores(h)).sort((a, b) => a - b);
+  document.getElementById('dayResults').innerHTML = dayHoles.length
+    ? dayHoles.map(h => formatDaytonaHoleResult(h, state.dayHoles[h])).join('')
+    : '<p class="hint">No holes recorded yet.</p>';
+  const daySums = state.players.map(() => 0);
+  dayHoles.forEach(h => { computeDaytonaHole(h, state.dayHoles[h]).payouts.forEach((p, i) => daySums[i] += p); });
+  document.getElementById('dayTotals').innerHTML = `<table class="totals-table">${state.players.map((p, i) => `<tr><td>${p}</td><td class="${daySums[i] >= 0 ? 'money-pos' : 'money-neg'}">${daySums[i] >= 0 ? '+' : ''}$${daySums[i].toFixed(2)}</td></tr>`).join('')}</table>`;
+
+  renderMatchplay('mpMatches');
+  renderSummary('summaryTable');
+}
+
+function renderScorecardInputs() {
+  const hole = Number(document.getElementById('scHole').value) || 1;
+  const existing = state.holes[hole];
+  document.getElementById('scPar').textContent = `Par ${activeCourse().holes[hole - 1].par}, Stroke Index ${activeCourse().holes[hole - 1].si}`;
+  const grid = document.getElementById('scScores');
+  grid.innerHTML = state.players.map((p, i) => `
+    <div>
+      <label for="scScore${i}">${p}</label>
+      <input type="number" id="scScore${i}" min="1" value="${existing && existing.scores[i] !== undefined ? existing.scores[i] : ''}">
+    </div>
+  `).join('');
+}
+document.getElementById('scHole').addEventListener('input', renderScorecardInputs);
+document.getElementById('scSubmit').addEventListener('click', () => {
+  const hole = Number(document.getElementById('scHole').value) || 1;
+  const scores = {};
+  let missing = false;
+  state.players.forEach((_, i) => {
+    const v = document.getElementById(`scScore${i}`).value;
+    if (v === '') missing = true;
+    scores[i] = v;
+  });
+  if (missing) { alert('Enter gross scores for all 5 players.'); return; }
+  state.holes[hole] = { scores };
+  saveState();
+  renderFullData();
+});
+function renderScorecardSummary() {
+  const holes = Object.keys(state.holes).map(Number).filter(holeHasScores).sort((a, b) => a - b);
+  const el = document.getElementById('scSummary');
+  if (holes.length === 0) { el.innerHTML = '<p class="hint">No holes entered yet.</p>'; return; }
+  el.innerHTML = `<table class="totals-table"><thead><tr><th>Hole</th>${state.players.map(p => `<th>${p}</th>`).join('')}</tr></thead><tbody>${
+    holes.map(h => `<tr><td>${h}</td>${state.players.map((_, i) => `<td>${state.holes[h].scores[i]}</td>`).join('')}</tr>`).join('')
+  }</tbody></table>`;
+}
+
+document.getElementById('resetRound').addEventListener('click', () => {
+  if (!confirm('This clears all scores, teams, and results for the round (course library and players stay). Continue?')) return;
+  const names = state.players, handicapIndex = state.handicapIndex, playerTeeIdx = state.playerTeeIdx;
+  const playerRosterId = state.playerRosterId, roster = state.roster;
+  const courses = state.courses, activeCourseId = state.activeCourseId, bets = state.bets;
+  state = {
+    players: names, handicapIndex, playerTeeIdx, playerRosterId, roster, courses, activeCourseId, bets,
+    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null
+  };
+  saveState();
+  document.getElementById('tabs').style.display = 'none';
+  updateRoundBar();
+  showScreen('home');
+});
+
+document.getElementById('newRoundLink').addEventListener('click', () => {
+  document.getElementById('resetRound').click();
+});
+
+/* ---------- Initial load ---------- */
+updateRoundBar();
+if (state.roundStarted) {
+  prepareTeeShotScreen();
+  showScreen('scrTeeShot');
+} else {
+  showScreen('home');
+}
