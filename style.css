@@ -213,3 +213,8 @@ button.danger { background: var(--danger); }
   font-size: 0.9rem;
 }
 .match-card b { color: var(--green-dark); }
+
+.mp-grid th, .mp-grid td { text-align: center; }
+.mp-grid thead th:first-child { text-align: left; }
+.mp-grid tbody th { text-align: left; }
+.mp-diag { background: var(--border); }

@@ -795,17 +795,24 @@ function holeMatchResults(hole) {
 }
 function renderMatchplay(targetId) {
   const status = computeMatchStatuses();
-  const container = document.getElementById(targetId);
-  const pairs = allPairs();
-  container.innerHTML = pairs.map(([i, j]) => {
-    const s = status[`${i}-${j}`];
-    const nameA = state.players[i], nameB = state.players[j];
-    let statusText;
-    if (s.diff === 0) statusText = 'All Square';
-    else if (s.diff > 0) statusText = `${nameA} ${s.diff} up`;
-    else statusText = `${nameB} ${-s.diff} up`;
-    return `<div class="match-card"><b>${nameA} vs ${nameB}</b>: ${statusText} through ${s.holesPlayed} hole(s)</div>`;
+  const rowDiff = (r, c) => {
+    const i = Math.min(r, c), j = Math.max(r, c);
+    const s = status[`${i}-${j}`].diff;
+    return r === i ? s : -s;
+  };
+  const header = `<tr><th>Player is up</th>${state.players.map(p => `<th>${p}</th>`).join('')}</tr>`;
+  const rows = state.players.map((p, r) => {
+    const cells = state.players.map((_, c) => {
+      if (r === c) return `<td class="mp-diag"></td>`;
+      const d = rowDiff(r, c);
+      if (d === 0) return `<td>AS</td>`;
+      const cls = d > 0 ? 'money-pos' : 'money-neg';
+      const text = d > 0 ? `${d} up` : `${-d} dn`;
+      return `<td class="${cls}">${text}</td>`;
+    }).join('');
+    return `<tr><th>${p}</th>${cells}</tr>`;
   }).join('');
+  document.getElementById(targetId).innerHTML = `<div class="table-scroll"><table class="totals-table mp-grid"><thead>${header}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /* ---------- Money Summary ---------- */
