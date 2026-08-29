@@ -9,6 +9,12 @@
 <body>
 <header class="topbar">
   <h1>⛳ Fairway Stakes</h1>
+  <div class="round-bar" style="margin-bottom:0.6rem;">
+    <span></span>
+    <span class="round-bar-links">
+      <button id="seasonMatchLink" type="button" class="linklike">🏆 Steve Match</button>
+    </span>
+  </div>
   <div id="roundBar" class="round-bar" style="display:none;">
     <span id="holeIndicator"></span>
     <span class="round-bar-links">
@@ -364,7 +370,67 @@
   </div>
 </section>
 
+<!-- ============ SEASON MATCH PLAY vs STEVE ============ -->
+<section id="seasonMatch" class="screen">
+  <h2>🏆 Season Match Play — Hardee vs Steve</h2>
+  <p class="hint">One continuous net match play match that runs all year. Cumulative status carries across every round.</p>
+
+  <div class="card">
+    <h3>Overall Status</h3>
+    <div id="smOverallStatus"></div>
+  </div>
+
+  <div class="card">
+    <h3>Add a Round</h3>
+    <label>Date <input type="date" id="smDate"></label>
+    <label>Course <input type="text" id="smCourse" placeholder="e.g. Lakeside Golf Club"></label>
+    <label>Tees <input type="text" id="smTees" placeholder="e.g. Green"></label>
+    <label>Strokes (from your perspective)
+      <select id="smStrokesDir">
+        <option value="receive">I receive strokes from Steve</option>
+        <option value="give">I give strokes to Steve</option>
+        <option value="none">Even — no strokes</option>
+      </select>
+    </label>
+    <label id="smStrokesCountWrap"># of strokes <input type="number" id="smStrokesCount" min="0" max="18" value="0"></label>
+
+    <h4>Course Template (pars &amp; stroke index)</h4>
+    <label>Load template
+      <select id="smTemplate">
+        <option value="lakeside_green">Lakeside — Green Tees</option>
+        <option value="lakeside_championship">Lakeside — Championship Tees</option>
+        <option value="custom">Custom / Manual</option>
+      </select>
+    </label>
+
+    <h4>Hole-by-Hole</h4>
+    <p class="hint">Stroke index 1 = hardest hole (gets strokes first).</p>
+    <div class="table-scroll">
+    <table class="input-table" id="smHoleTable">
+      <thead><tr><th>Hole</th><th>Par</th><th>SI</th><th>Hardee</th><th>Steve</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+
+    <button id="smSaveRoundBtn" type="button" class="primary-btn">Save Round</button>
+    <button id="smCancelEditBtn" type="button" class="secondary-btn" style="display:none;">Cancel Edit</button>
+  </div>
+
+  <div class="card">
+    <h3>Hole-by-Hole Cumulative</h3>
+    <div id="smHoleByHole" class="table-scroll"></div>
+  </div>
+
+  <div class="card">
+    <h3>By Round</h3>
+    <div id="smByRound" class="table-scroll"></div>
+  </div>
+
+  <button id="smCloseBtn" class="secondary-btn">← Back</button>
+</section>
+
 </main>
 <script src="app.js"></script>
+<script src="seasonMatch.js"></script>
 </body>
 </html>
