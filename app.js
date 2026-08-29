@@ -52,7 +52,8 @@ let state = loadState() || {
   wolfOrderShiftBase: 0,
   wolfOrder: [0, 1, 2, 3, 4],
   pendingWolf: null,
-  superWolfEnabled: false
+  superWolfEnabled: false,
+  editingHole: null
 };
 
 // Migrations for older saved rounds.
@@ -96,6 +97,11 @@ if (state.wolfOrderShiftBase === undefined) state.wolfOrderShiftBase = 0;
 if (!state.wolfOrder) state.wolfOrder = [0, 1, 2, 3, 4];
 if (state.pendingWolf === undefined) state.pendingWolf = null;
 if (state.superWolfEnabled === undefined) state.superWolfEnabled = false;
+if (state.editingHole === undefined) state.editingHole = null;
+
+function activeHole() {
+  return (state.editingHole !== null && state.editingHole !== undefined) ? state.editingHole : state.currentHole;
+}
 
 function loadState() {
   try {
@@ -500,8 +506,8 @@ document.getElementById('holeSetupContinueBtn').addEventListener('click', () => 
 
 /* ---------- Post Tee Shot ---------- */
 function prepareTeeShotScreen() {
-  const hole = state.currentHole;
-  document.getElementById('teeShotTitle').textContent = `Hole ${hole} — Post Tee Shot`;
+  const hole = activeHole();
+  document.getElementById('teeShotTitle').textContent = `Hole ${hole} — Post Tee Shot${state.editingHole ? ' (Editing)' : ''}`;
   const wolfSel = document.getElementById('wolfPlayer');
   wolfSel.innerHTML = state.players.map((p, i) => `<option value="${i}">${p}</option>`).join('');
 
@@ -547,7 +553,7 @@ function randomizeDaytonaForHole(hole) {
 }
 
 document.getElementById('teeShotContinueBtn').addEventListener('click', () => {
-  const hole = state.currentHole;
+  const hole = activeHole();
   const wolf = Number(document.getElementById('wolfPlayer').value);
   const mode = document.getElementById('wolfMode').value;
   const partner = mode === 'partner' ? Number(document.getElementById('wolfPartner').value) : null;
@@ -562,9 +568,9 @@ document.getElementById('teeShotContinueBtn').addEventListener('click', () => {
 
 /* ---------- Enter Scores ---------- */
 function prepareEnterScoresScreen() {
-  const hole = state.currentHole;
+  const hole = activeHole();
   const course = activeCourse();
-  document.getElementById('enterScoresTitle').textContent = `Hole ${hole} — Enter Scores`;
+  document.getElementById('enterScoresTitle').textContent = `Hole ${hole} — Enter Scores${state.editingHole ? ' (Editing)' : ''}`;
   document.getElementById('holeParHint').textContent = `Par ${course.holes[hole - 1].par}, Stroke Index ${course.holes[hole - 1].si}`;
 
   const pw = state.pendingWolf || {};
@@ -605,7 +611,7 @@ function prepareEnterScoresScreen() {
 }
 
 document.getElementById('submitHoleBtn').addEventListener('click', () => {
-  const hole = state.currentHole;
+  const hole = activeHole();
   const scores = {};
   let missing = false;
   state.players.forEach((_, i) => {
@@ -621,6 +627,7 @@ document.getElementById('submitHoleBtn').addEventListener('click', () => {
   const trashA = Number(document.getElementById('holeTrashA').value) || 0;
   const trashB = Number(document.getElementById('holeTrashB').value) || 0;
   state.wolfHoles[hole] = { wolf: pw.wolf, mode: pw.mode, partner: pw.partner, hammers, trashA, trashB };
+  state.editingHole = null;
   saveState();
   prepareHoleSummary(hole);
   showScreen('scrHoleSummary');
@@ -928,6 +935,15 @@ document.getElementById('viewStandingsBtn').addEventListener('click', () => {
   showScreen('scrStandings');
 });
 
+document.getElementById('editHoleBtn').addEventListener('click', () => {
+  const hole = Number(document.getElementById('editHoleInput').value) || 1;
+  if (hole < 1 || hole > 18 || !holeHasScores(hole)) { alert('That hole has not been played yet.'); return; }
+  state.editingHole = hole;
+  saveState();
+  prepareTeeShotScreen();
+  showScreen('scrTeeShot');
+});
+
 function prepareStandings() {
   renderSummary('standingsSummary');
   renderMatchplay('standingsMatches');
@@ -1086,7 +1102,7 @@ document.getElementById('resetRound').addEventListener('click', () => {
   const courses = state.courses, activeCourseId = state.activeCourseId, bets = state.bets;
   state = {
     players: names, handicapIndex, playerTeeIdx, playerRosterId, roster, courses, activeCourseId, bets,
-    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, startHole: 1, holeIndex: 0, wolfOrderShiftBase: 0, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null, superWolfEnabled: false
+    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, startHole: 1, holeIndex: 0, wolfOrderShiftBase: 0, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null, superWolfEnabled: false, editingHole: null
   };
   saveState();
   document.getElementById('tabs').style.display = 'none';
