@@ -583,7 +583,7 @@ function prepareEnterScoresScreen() {
 
   const day = state.dayHoles[hole];
   if (day) {
-    document.getElementById('daytonaTeamsRef').innerHTML = `<b>Daytona:</b> ${day.teamOf2.map(i => state.players[i]).join(' & ')} (2) vs ${day.teamOf3.map(i => state.players[i]).join(', ')} (3, best+worst count)`;
+    document.getElementById('daytonaTeamsRef').innerHTML = `<b>Daytona:</b> ${day.teamOf2.map(i => state.players[i]).join(' & ')} (2) vs ${day.teamOf3.map(i => state.players[i]).join(', ')} (3, every 2-man combo played)`;
   }
 
   document.getElementById('holeTrashALabel').childNodes[0].textContent = isPartner
@@ -722,60 +722,72 @@ function formatWolfHoleResult(hole, data) {
 }
 
 /* ---------- Daytona math ---------- */
+// The 2-man team's number is fixed for the hole. Instead of the 3-man team dropping
+// its middle score, the 2-man team plays each of the three possible 2-man pairings
+// from the 3-man team as a separate mini-match, and the payouts from all three sum up.
 function computeDaytonaHole(hole, data) {
   const scores = state.holes[hole].scores;
   const nets = state.players.map((_, i) => netScore(i, hole, scores[i]));
   const par = activeCourse().holes[hole - 1].par;
   const isBirdie = i => Number(scores[i]) <= par - 1;
+  const rate = state.bets.daytonaPointValue;
 
   const [a1, a2] = data.teamOf2;
   const teamAnets = [nets[a1], nets[a2]].sort((x, y) => x - y);
-  let numA = teamAnets[0] * 10 + teamAnets[1];
-
-  const bNets = data.teamOf3.map(i => nets[i]);
-  const best = Math.min(...bNets);
-  const worst = Math.max(...bNets);
-  const teamBnets = [best, worst].sort((x, y) => x - y);
-  let numB = teamBnets[0] * 10 + teamBnets[1];
-
   const teamABirdied = data.teamOf2.some(isBirdie);
-  const teamBBirdied = data.teamOf3.some(isBirdie);
-  let flippedA = false, flippedB = false;
-  if (teamBBirdied) { numA = teamAnets[1] * 10 + teamAnets[0]; flippedA = true; }
-  if (teamABirdied) { numB = teamBnets[1] * 10 + teamBnets[0]; flippedB = true; }
 
-  const diff = Math.abs(numA - numB);
-  const rate = state.bets.daytonaPointValue;
+  const [b1, b2, b3] = data.teamOf3;
+  const combos = [[b1, b2], [b1, b3], [b2, b3]];
+
   const payouts = state.players.map(() => 0);
-  let money = 0;
-  // Each losing player pays the full point differential individually; winners split that pot evenly.
-  if (numA < numB) {
-    money = diff * rate * data.teamOf3.length;
-    data.teamOf3.forEach(i => payouts[i] -= diff * rate);
-    data.teamOf2.forEach(i => payouts[i] += money / data.teamOf2.length);
-  } else if (numB < numA) {
-    money = diff * rate * data.teamOf2.length;
-    data.teamOf2.forEach(i => payouts[i] -= diff * rate);
-    data.teamOf3.forEach(i => payouts[i] += money / data.teamOf3.length);
-  }
+  const games = combos.map(pair => {
+    const pairBirdied = pair.some(isBirdie);
+    let numA = teamAnets[0] * 10 + teamAnets[1];
+    let flippedA = false;
+    if (pairBirdied) { numA = teamAnets[1] * 10 + teamAnets[0]; flippedA = true; }
 
-  return { nets, numA, numB, diff, rate, money, payouts, teamABirdied, teamBBirdied, flippedA, flippedB };
+    const pairNets = [nets[pair[0]], nets[pair[1]]].sort((x, y) => x - y);
+    let numB = pairNets[0] * 10 + pairNets[1];
+    let flippedB = false;
+    if (teamABirdied) { numB = pairNets[1] * 10 + pairNets[0]; flippedB = true; }
+
+    const diff = Math.abs(numA - numB);
+    let money = 0;
+    // Each losing player pays the full point differential individually; winners split that pot evenly.
+    if (numA < numB) {
+      money = diff * rate * pair.length;
+      pair.forEach(i => payouts[i] -= diff * rate);
+      data.teamOf2.forEach(i => payouts[i] += money / data.teamOf2.length);
+    } else if (numB < numA) {
+      money = diff * rate * data.teamOf2.length;
+      data.teamOf2.forEach(i => payouts[i] -= diff * rate);
+      pair.forEach(i => payouts[i] += money / pair.length);
+    }
+
+    return { pair, numA, numB, diff, money, flippedA, flippedB };
+  });
+
+  return { nets, rate, games, payouts };
 }
 
 function formatDaytonaHoleResult(hole, data) {
   const r = computeDaytonaHole(hole, data);
   const teamAName = data.teamOf2.map(i => state.players[i]).join(' & ');
   const teamBName = data.teamOf3.map(i => state.players[i]).join(', ');
-  let outcome;
-  if (r.numA === r.numB) outcome = `Push — both ${r.numA}.`;
-  else if (r.numA < r.numB) outcome = `<span class="win-text">${teamAName} win $${Math.round(r.money)}</span> (${r.numA} vs ${r.numB}, $${r.rate}/pt)`;
-  else outcome = `<span class="win-text">${teamBName} win $${Math.round(r.money)}</span> (${r.numB} vs ${r.numA}, $${r.rate}/pt)`;
-  const flipNote = [
-    r.flippedA ? `${teamBName} birdied — ${teamAName}'s number flipped` : '',
-    r.flippedB ? `${teamAName} birdied — ${teamBName}'s number flipped` : ''
-  ].filter(Boolean).join('; ');
+  const gamesHtml = r.games.map(g => {
+    const pairName = g.pair.map(i => state.players[i]).join(' & ');
+    let outcome;
+    if (g.numA === g.numB) outcome = `Push — both ${g.numA}.`;
+    else if (g.numA < g.numB) outcome = `<span class="win-text">${teamAName} win $${Math.round(g.money)}</span> (${g.numA} vs ${g.numB}, $${r.rate}/pt)`;
+    else outcome = `<span class="win-text">${pairName} win $${Math.round(g.money)}</span> (${g.numB} vs ${g.numA}, $${r.rate}/pt)`;
+    const flipNote = [
+      g.flippedA ? `${pairName} birdied — ${teamAName}'s number flipped` : '',
+      g.flippedB ? `${teamAName} birdied — ${pairName}'s number flipped` : ''
+    ].filter(Boolean).join('; ');
+    return `<div class="hint"><b>vs ${pairName}:</b> ${outcome}${flipNote ? ` (${flipNote})` : ''}</div>`;
+  }).join('');
   const payoutLine = state.players.map((p, i) => `${p} ${fmtMoney(r.payouts[i])}`).join(', ');
-  return `<div class="result-row"><b>Hole ${hole}</b>: ${teamAName} (2) vs ${teamBName} (3)<br>${outcome}${flipNote ? `<br><span class="hint">${flipNote}</span>` : ''}<br><span class="hint">${payoutLine}</span></div>`;
+  return `<div class="result-row"><b>Hole ${hole}</b>: ${teamAName} (2) vs ${teamBName} (3, every 2-man combo played)<br>${gamesHtml}<br><span class="hint">${payoutLine}</span></div>`;
 }
 
 /* ---------- Match Play math ---------- */
