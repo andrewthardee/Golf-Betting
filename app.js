@@ -752,19 +752,20 @@ function computeDaytonaHole(hole, data) {
     if (teamABirdied) { numB = pairNets[1] * 10 + pairNets[0]; flippedB = true; }
 
     const diff = Math.abs(numA - numB);
+    const gamePayouts = state.players.map(() => 0);
     let money = 0;
     // Each losing player pays the full point differential individually; winners split that pot evenly.
     if (numA < numB) {
       money = diff * rate * pair.length;
-      pair.forEach(i => payouts[i] -= diff * rate);
-      data.teamOf2.forEach(i => payouts[i] += money / data.teamOf2.length);
+      pair.forEach(i => { gamePayouts[i] -= diff * rate; payouts[i] -= diff * rate; });
+      data.teamOf2.forEach(i => { gamePayouts[i] += money / data.teamOf2.length; payouts[i] += money / data.teamOf2.length; });
     } else if (numB < numA) {
       money = diff * rate * data.teamOf2.length;
-      data.teamOf2.forEach(i => payouts[i] -= diff * rate);
-      pair.forEach(i => payouts[i] += money / pair.length);
+      data.teamOf2.forEach(i => { gamePayouts[i] -= diff * rate; payouts[i] -= diff * rate; });
+      pair.forEach(i => { gamePayouts[i] += money / pair.length; payouts[i] += money / pair.length; });
     }
 
-    return { pair, numA, numB, diff, money, flippedA, flippedB };
+    return { pair, numA, numB, diff, money, flippedA, flippedB, payouts: gamePayouts };
   });
 
   return { nets, rate, games, payouts };
@@ -784,7 +785,9 @@ function formatDaytonaHoleResult(hole, data) {
       g.flippedA ? `${pairName} birdied — ${teamAName}'s number flipped` : '',
       g.flippedB ? `${teamAName} birdied — ${pairName}'s number flipped` : ''
     ].filter(Boolean).join('; ');
-    return `<div class="hint"><b>vs ${pairName}:</b> ${outcome}${flipNote ? ` (${flipNote})` : ''}</div>`;
+    const involved = data.teamOf2.concat(g.pair);
+    const gamePayoutLine = involved.map(i => `${state.players[i]} ${fmtMoney(g.payouts[i])}`).join(', ');
+    return `<div class="hint"><b>${teamAName} vs ${pairName}:</b> ${outcome}${flipNote ? ` (${flipNote})` : ''}<br>${gamePayoutLine}</div>`;
   }).join('');
   const payoutLine = state.players.map((p, i) => `${p} ${fmtMoney(r.payouts[i])}`).join(', ');
   return `<div class="result-row"><b>Hole ${hole}</b>: ${teamAName} (2) vs ${teamBName} (3, every 2-man combo played)<br>${gamesHtml}<br><span class="hint">${payoutLine}</span></div>`;
