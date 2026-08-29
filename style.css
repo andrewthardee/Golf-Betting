@@ -214,9 +214,15 @@ button.danger { background: var(--danger); }
 }
 .match-card b { color: var(--green-dark); }
 
-.mp-grid, .sc-grid { table-layout: fixed; }
-.mp-grid th, .mp-grid td, .sc-grid th, .sc-grid td { text-align: center; width: 3rem; }
-.mp-grid thead th:first-child, .sc-grid thead th:first-child { text-align: left; width: 3.5rem; }
-.mp-grid tbody th { text-align: left; width: 3.5rem; }
-.sc-grid tbody td:first-child { text-align: left; font-weight: 600; }
+.mp-grid, .sc-grid { table-layout: auto; }
+.mp-grid th, .mp-grid td, .sc-grid th, .sc-grid td {
+  text-align: center;
+  white-space: nowrap;
+  min-width: 3.5rem;
+  padding: 0.4rem 0.5rem;
+  border-left: 1px solid var(--border);
+}
+.mp-grid thead th:first-child, .sc-grid thead th:first-child { text-align: left; border-left: none; }
+.mp-grid tbody th { text-align: left; border-left: none; }
+.sc-grid tbody td:first-child { text-align: left; font-weight: 600; border-left: none; }
 .mp-diag { background: var(--border); }

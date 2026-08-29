@@ -156,7 +156,8 @@ function holeHasScores(hole) {
 /* ---------- Money formatting ---------- */
 function fmtMoney(v) {
   const cls = v >= 0 ? 'money-pos' : 'money-neg';
-  const text = v >= 0 ? `$${v.toFixed(2)}` : `($${Math.abs(v).toFixed(2)})`;
+  const rounded = Math.round(Math.abs(v));
+  const text = v >= 0 ? `$${rounded}` : `($${rounded})`;
   return `<span class="${cls}">${text}</span>`;
 }
 
@@ -760,8 +761,8 @@ function formatDaytonaHoleResult(hole, data) {
   const teamBName = data.teamOf3.map(i => state.players[i]).join(', ');
   let outcome;
   if (r.numA === r.numB) outcome = `Push — both ${r.numA}.`;
-  else if (r.numA < r.numB) outcome = `<span class="win-text">${teamAName} win $${r.money.toFixed(2)}</span> (${r.numA} vs ${r.numB}, $${r.rate}/pt)`;
-  else outcome = `<span class="win-text">${teamBName} win $${r.money.toFixed(2)}</span> (${r.numB} vs ${r.numA}, $${r.rate}/pt)`;
+  else if (r.numA < r.numB) outcome = `<span class="win-text">${teamAName} win $${Math.round(r.money)}</span> (${r.numA} vs ${r.numB}, $${r.rate}/pt)`;
+  else outcome = `<span class="win-text">${teamBName} win $${Math.round(r.money)}</span> (${r.numB} vs ${r.numA}, $${r.rate}/pt)`;
   const flipNote = [
     r.flippedA ? `${teamBName} birdied — ${teamAName}'s number flipped` : '',
     r.flippedB ? `${teamAName} birdied — ${teamBName}'s number flipped` : ''
