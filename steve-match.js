@@ -292,18 +292,10 @@ function smStartEdit(id) {
 
   document.getElementById('smCancelEditBtn').style.display = '';
   document.getElementById('smSaveRoundBtn').textContent = 'Update Round';
-  document.getElementById('seasonMatch').scrollIntoView({ behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ---------- Wiring ---------- */
-document.getElementById('seasonMatchLink').addEventListener('click', () => {
-  smResetForm();
-  smRenderAll();
-  showScreen('seasonMatch');
-});
-document.getElementById('smCloseBtn').addEventListener('click', () => {
-  showScreen(state.roundStarted ? 'scrStandings' : 'home');
-});
 document.getElementById('smTemplate').addEventListener('change', (e) => {
   smRenderTemplateTable(e.target.value);
 });
@@ -324,5 +316,5 @@ document.getElementById('smSaveRoundBtn').addEventListener('click', () => {
   smRenderAll();
 });
 
-smRenderTemplateTable('lakeside_green');
-smUpdateStrokesCountVisibility();
+smResetForm();
+smRenderAll();
