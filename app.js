@@ -49,8 +49,10 @@ let state = loadState() || {
   currentHole: 1,
   startHole: 1,
   holeIndex: 0,
+  wolfOrderShiftBase: 0,
   wolfOrder: [0, 1, 2, 3, 4],
-  pendingWolf: null
+  pendingWolf: null,
+  superWolfEnabled: false
 };
 
 // Migrations for older saved rounds.
@@ -90,8 +92,10 @@ if (state.roundStarted === undefined) state.roundStarted = false;
 if (!state.currentHole) state.currentHole = 1;
 if (!state.startHole) state.startHole = 1;
 if (state.holeIndex === undefined) state.holeIndex = 0;
+if (state.wolfOrderShiftBase === undefined) state.wolfOrderShiftBase = 0;
 if (!state.wolfOrder) state.wolfOrder = [0, 1, 2, 3, 4];
 if (state.pendingWolf === undefined) state.pendingWolf = null;
+if (state.superWolfEnabled === undefined) state.superWolfEnabled = false;
 
 function loadState() {
   try {
@@ -433,6 +437,11 @@ document.getElementById('playersContinueBtn').addEventListener('click', () => {
   document.getElementById('trashSmall').value = state.bets.trashSmall;
   document.getElementById('trashBig').value = state.bets.trashBig;
   document.getElementById('daytonaPointValue').value = state.bets.daytonaPointValue;
+  document.getElementById('superWolfEnabled').checked = state.superWolfEnabled;
+});
+document.getElementById('superWolfEnabled').addEventListener('change', e => {
+  state.superWolfEnabled = e.target.checked;
+  saveState();
 });
 
 /* ---------- STEP 3: Bets ---------- */
@@ -479,6 +488,7 @@ document.getElementById('holeSetupContinueBtn').addEventListener('click', () => 
   state.currentHole = Number(document.getElementById('startHoleInput').value) || 1;
   state.startHole = state.currentHole;
   state.holeIndex = 0;
+  state.wolfOrderShiftBase = 0;
   const sels = document.querySelectorAll('.wolfOrderSel');
   state.wolfOrder = Array.from(sels).map(el => Number(el.value));
   saveState();
@@ -494,7 +504,7 @@ function prepareTeeShotScreen() {
   const wolfSel = document.getElementById('wolfPlayer');
   wolfSel.innerHTML = state.players.map((p, i) => `<option value="${i}">${p}</option>`).join('');
 
-  const shift = state.holeIndex % NUM_PLAYERS;
+  const shift = ((state.holeIndex - state.wolfOrderShiftBase) % NUM_PLAYERS + NUM_PLAYERS) % NUM_PLAYERS;
   const teeOrder = state.wolfOrder.slice(shift).concat(state.wolfOrder.slice(0, shift));
   const suggested = teeOrder[0];
   const existing = state.wolfHoles[hole];
@@ -851,6 +861,52 @@ function renderSummary(targetId) {
   `;
 }
 
+/* ---------- Super Wolf (last 3 holes) ---------- */
+function computeMoneyTotals() {
+  const wolfSums = state.players.map(() => 0);
+  Object.keys(state.wolfHoles).filter(h => holeHasScores(Number(h))).forEach(h => {
+    const r = computeWolfHole(Number(h), state.wolfHoles[h]);
+    r.payouts.forEach((p, i) => wolfSums[i] += p);
+  });
+  const daySums = state.players.map(() => 0);
+  Object.keys(state.dayHoles).filter(h => state.dayHoles[h].teamOf2 && holeHasScores(Number(h))).forEach(h => {
+    const r = computeDaytonaHole(Number(h), state.dayHoles[h]);
+    r.payouts.forEach((p, i) => daySums[i] += p);
+  });
+  return state.players.map((_, i) => wolfSums[i] + daySums[i]);
+}
+
+let pendingSuperWolfOrder = null;
+
+function prepareSuperWolfScreen() {
+  const hole = state.currentHole;
+  document.getElementById('superWolfTitle').textContent = `Hole ${hole} — Super Wolf`;
+  const totals = computeMoneyTotals();
+  const order = state.players.map((_, i) => i).sort((a, b) => totals[a] - totals[b]);
+  pendingSuperWolfOrder = order;
+  document.getElementById('superWolfOrderList').innerHTML = `<b>New tee order for Hole ${hole} (most $ down first, most $ up last):</b><br>` +
+    order.map((p, i) => `${i + 1}. ${state.players[p]} ${fmtMoney(totals[p])}${i === 0 ? ' — Super Wolf, sets new bets' : ''}`).join('<br>');
+  document.getElementById('swSmallStake').value = state.bets.smallStake;
+  document.getElementById('swBigStake').value = state.bets.bigStake;
+  document.getElementById('swTrashSmall').value = state.bets.trashSmall;
+  document.getElementById('swTrashBig').value = state.bets.trashBig;
+  document.getElementById('swDaytonaPointValue').value = state.bets.daytonaPointValue;
+  updateRoundBar();
+}
+
+document.getElementById('superWolfContinueBtn').addEventListener('click', () => {
+  state.bets.smallStake = Number(document.getElementById('swSmallStake').value) || 0;
+  state.bets.bigStake = Number(document.getElementById('swBigStake').value) || 0;
+  state.bets.trashSmall = Number(document.getElementById('swTrashSmall').value) || 0;
+  state.bets.trashBig = Number(document.getElementById('swTrashBig').value) || 0;
+  state.bets.daytonaPointValue = Number(document.getElementById('swDaytonaPointValue').value) || 0;
+  state.wolfOrder = pendingSuperWolfOrder;
+  state.wolfOrderShiftBase = state.holeIndex;
+  saveState();
+  prepareTeeShotScreen();
+  showScreen('scrTeeShot');
+});
+
 /* ---------- Hole Summary screen ---------- */
 function prepareHoleSummary(hole) {
   document.getElementById('holeSummaryTitle').textContent = `Hole ${hole} Summary`;
@@ -920,8 +976,13 @@ document.getElementById('nextHoleBtn').addEventListener('click', () => {
   state.currentHole = ((state.startHole - 1 + state.holeIndex) % 18) + 1;
   state.pendingWolf = null;
   saveState();
-  prepareTeeShotScreen();
-  showScreen('scrTeeShot');
+  if (state.superWolfEnabled && [15, 16, 17].includes(state.holeIndex)) {
+    prepareSuperWolfScreen();
+    showScreen('scrSuperWolf');
+  } else {
+    prepareTeeShotScreen();
+    showScreen('scrTeeShot');
+  }
 });
 
 /* ---------- Full Data (old tabs, view/edit fallback) ---------- */
@@ -1024,7 +1085,7 @@ document.getElementById('resetRound').addEventListener('click', () => {
   const courses = state.courses, activeCourseId = state.activeCourseId, bets = state.bets;
   state = {
     players: names, handicapIndex, playerTeeIdx, playerRosterId, roster, courses, activeCourseId, bets,
-    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, startHole: 1, holeIndex: 0, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null
+    holes: {}, wolfHoles: {}, dayHoles: {}, roundStarted: false, currentHole: 1, startHole: 1, holeIndex: 0, wolfOrderShiftBase: 0, wolfOrder: [0, 1, 2, 3, 4], pendingWolf: null, superWolfEnabled: false
   };
   saveState();
   document.getElementById('tabs').style.display = 'none';
