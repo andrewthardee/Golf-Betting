@@ -1042,6 +1042,11 @@ function switchTab(tabId) {
 function renderFullData() {
   document.getElementById('setupCourseName').textContent = `Course: ${activeCourse().name}`;
   document.getElementById('setupBetSummary').textContent = `Wolf: $${state.bets.smallStake}/$${state.bets.bigStake} (small/big team). Trash: $${state.bets.trashSmall}/$${state.bets.trashBig}. Daytona: $${state.bets.daytonaPointValue}/pt. Match Play: status only, no $.`;
+  document.getElementById('editSmallStake').value = state.bets.smallStake;
+  document.getElementById('editBigStake').value = state.bets.bigStake;
+  document.getElementById('editTrashSmall').value = state.bets.trashSmall;
+  document.getElementById('editTrashBig').value = state.bets.trashBig;
+  document.getElementById('editDaytonaPointValue').value = state.bets.daytonaPointValue;
 
   renderScorecardInputs();
   renderScorecardSummary();
@@ -1109,6 +1114,12 @@ function renderScorecardSummary() {
     holes.map(h => `<tr><td>${h}</td>${state.players.map((_, i) => `<td>${state.holes[h].scores[i]}</td>`).join('')}</tr>`).join('')
   }</tbody></table>`;
 }
+
+document.getElementById('editSmallStake').addEventListener('input', e => { state.bets.smallStake = Number(e.target.value) || 0; saveState(); renderFullData(); });
+document.getElementById('editBigStake').addEventListener('input', e => { state.bets.bigStake = Number(e.target.value) || 0; saveState(); renderFullData(); });
+document.getElementById('editTrashSmall').addEventListener('input', e => { state.bets.trashSmall = Number(e.target.value) || 0; saveState(); renderFullData(); });
+document.getElementById('editTrashBig').addEventListener('input', e => { state.bets.trashBig = Number(e.target.value) || 0; saveState(); renderFullData(); });
+document.getElementById('editDaytonaPointValue').addEventListener('input', e => { state.bets.daytonaPointValue = Number(e.target.value) || 0; saveState(); renderFullData(); });
 
 document.getElementById('resetRound').addEventListener('click', () => {
   if (!confirm('This clears all scores, teams, and results for the round (course library and players stay). Continue?')) return;

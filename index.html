@@ -291,6 +291,16 @@
   </div>
 
   <div class="card">
+    <h3>Edit Bet Denominations</h3>
+    <p class="hint">Changing these recalculates every hole in the round immediately (money isn't locked in per-hole).</p>
+    <label>Wolf small team stake ($/man) <input type="number" id="editSmallStake" min="0" step="1"></label>
+    <label>Wolf big team stake ($/man) <input type="number" id="editBigStake" min="0" step="1"></label>
+    <label>Trash small team ($) <input type="number" id="editTrashSmall" min="0" step="1"></label>
+    <label>Trash big team ($) <input type="number" id="editTrashBig" min="0" step="1"></label>
+    <label>Daytona $ per point <input type="number" id="editDaytonaPointValue" min="0" step="0.5"></label>
+  </div>
+
+  <div class="card">
     <button id="resetRound" class="danger">Start New Round (clear all data)</button>
   </div>
 </section>
