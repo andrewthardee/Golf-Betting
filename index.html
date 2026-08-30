@@ -228,7 +228,15 @@
   <div class="card">
     <h3>Wolf Extras</h3>
     <label>Hammers accepted (each doubles the Wolf bet) <input type="text" inputmode="numeric" pattern="[0-9]*" id="wolfHammers" value="0"></label>
-    <p class="hint">A gross birdie (or better) by any player also doubles the Wolf bet, stacking with hammers.</p>
+    <p class="hint">A gross birdie (or better) by any player also doubles the Wolf bet, stacking with hammers. Any hammers accepted before a decline (below) still double the bet.</p>
+    <label>Declined Hammer
+      <select id="declinedHammer">
+        <option value="">None</option>
+        <option value="A" id="declineOptA">Small team declined</option>
+        <option value="B" id="declineOptB">Big team declined</option>
+      </select>
+    </label>
+    <p class="hint">A team that declines a hammer automatically loses the hole, no matter the score. If they still make a birdie, it cancels out one birdie from the winning team (for bet-doubling purposes only).</p>
   </div>
 
   <div class="card">

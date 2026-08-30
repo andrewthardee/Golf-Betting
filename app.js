@@ -598,6 +598,12 @@ function prepareEnterScoresScreen() {
   document.getElementById('holeTrashBLabel').childNodes[0].textContent = isPartner
     ? 'Trash won by big team (other 3) '
     : 'Trash won by the other 4 ';
+  document.getElementById('declineOptA').textContent = isPartner
+    ? 'Small team (wolf + partner) declined'
+    : 'Wolf declined';
+  document.getElementById('declineOptB').textContent = isPartner
+    ? 'Big team (other 3) declined'
+    : 'Other 4 declined';
 
   const existingHole = state.holes[hole];
   const grid = document.getElementById('holeScores');
@@ -612,6 +618,7 @@ function prepareEnterScoresScreen() {
   document.getElementById('wolfHammers').value = existingWolfHole ? (existingWolfHole.hammers || 0) : 0;
   document.getElementById('holeTrashA').value = existingWolfHole ? (existingWolfHole.trashA || 0) : 0;
   document.getElementById('holeTrashB').value = existingWolfHole ? (existingWolfHole.trashB || 0) : 0;
+  document.getElementById('declinedHammer').value = existingWolfHole ? (existingWolfHole.declinedTeam || '') : '';
 
   updateRoundBar();
 }
@@ -632,7 +639,8 @@ document.getElementById('submitHoleBtn').addEventListener('click', () => {
   const hammers = Number(document.getElementById('wolfHammers').value) || 0;
   const trashA = Number(document.getElementById('holeTrashA').value) || 0;
   const trashB = Number(document.getElementById('holeTrashB').value) || 0;
-  state.wolfHoles[hole] = { wolf: pw.wolf, mode: pw.mode, partner: pw.partner, hammers, trashA, trashB };
+  const declinedTeam = document.getElementById('declinedHammer').value || null;
+  state.wolfHoles[hole] = { wolf: pw.wolf, mode: pw.mode, partner: pw.partner, hammers, trashA, trashB, declinedTeam };
   state.editingHole = null;
   saveState();
   prepareHoleSummary(hole);
@@ -641,10 +649,11 @@ document.getElementById('submitHoleBtn').addEventListener('click', () => {
 
 /* ---------- Wolf math ---------- */
 function computeWolfHole(hole, data) {
-  const { wolf, mode, partner, hammers, trashA, trashB } = data;
+  const { wolf, mode, partner, hammers, trashA, trashB, declinedTeam } = data;
   const scores = state.holes[hole].scores;
   const nets = state.players.map((_, i) => netScore(i, hole, scores[i]));
   const par = activeCourse().holes[hole - 1].par;
+  const isBirdie = i => Number(scores[i]) <= par - 1;
 
   let teamA, teamB, isPartner;
   if (mode === 'partner') {
@@ -660,20 +669,39 @@ function computeWolfHole(hole, data) {
   const aBest = Math.min(...teamA.map(i => nets[i]));
   const bBest = Math.min(...teamB.map(i => nets[i]));
 
-  const birdieCount = state.players.reduce((count, _, i) => Number(scores[i]) <= par - 1 ? count + 1 : count, 0);
-  const multiplier = Math.pow(2, hammers) * Math.pow(2, birdieCount);
-
   const wolfPayouts = state.players.map(() => 0);
   const trashPayouts = state.players.map(() => 0);
-  let tie = (aBest === bBest);
-  let winners = [], losers = [];
+  let tie, winners, losers;
+
+  if (declinedTeam) {
+    tie = false;
+    losers = declinedTeam === 'A' ? teamA : teamB;
+    winners = declinedTeam === 'A' ? teamB : teamA;
+  } else {
+    tie = (aBest === bBest);
+    winners = []; losers = [];
+    if (!tie) {
+      if (aBest < bBest) { winners = teamA; losers = teamB; }
+      else { winners = teamB; losers = teamA; }
+    }
+  }
+
+  // Normally any gross birdie by anyone doubles the bet. When a team declines a hammer,
+  // a birdie by that (auto-losing) team instead cancels out one of the winning team's birdies.
+  let birdieCount;
+  if (declinedTeam) {
+    const winnersBirdies = winners.reduce((c, i) => isBirdie(i) ? c + 1 : c, 0);
+    const losersBirdies = losers.reduce((c, i) => isBirdie(i) ? c + 1 : c, 0);
+    birdieCount = Math.max(0, winnersBirdies - losersBirdies);
+  } else {
+    birdieCount = state.players.reduce((count, _, i) => isBirdie(i) ? count + 1 : count, 0);
+  }
+  const multiplier = Math.pow(2, hammers) * Math.pow(2, birdieCount);
 
   if (isPartner) {
     const rateA = state.bets.smallStake * multiplier;
     const rateB = state.bets.bigStake * multiplier;
     if (!tie) {
-      if (aBest < bBest) { winners = teamA; losers = teamB; }
-      else { winners = teamB; losers = teamA; }
       teamA.forEach(i => { wolfPayouts[i] += (winners === teamA ? rateA : -rateA); });
       teamB.forEach(i => { wolfPayouts[i] += (winners === teamB ? rateB : -rateB); });
     }
@@ -688,8 +716,6 @@ function computeWolfHole(hole, data) {
   } else {
     const rate = state.bets.bigStake * multiplier;
     if (!tie) {
-      if (aBest < bBest) { winners = teamA; losers = teamB; }
-      else { winners = teamB; losers = teamA; }
       winners.forEach(w => { wolfPayouts[w] += rate * losers.length; });
       losers.forEach(l => { wolfPayouts[l] -= rate * winners.length; });
     }
@@ -713,7 +739,11 @@ function formatWolfHoleResult(hole, data) {
   const wolfName = state.players[data.wolf];
   const modeLabel = data.mode === 'partner' ? `w/ ${state.players[data.partner]}` : (data.mode === 'lone' ? '(voluntary lone wolf)' : '(forced lone wolf)');
   let outcome;
-  if (r.tie) outcome = `Push — tied at net ${r.aBest}.`;
+  if (data.declinedTeam) {
+    const declinerNames = (data.declinedTeam === 'A' ? r.teamA : r.teamB).map(i => state.players[i]).join(' & ');
+    const winNames = r.winners.map(i => state.players[i]).join(' & ');
+    outcome = `<span class="win-text">${winNames} win the hole</span> — ${declinerNames} declined the hammer (auto-loss, net scores don't matter, hammers: ${data.hammers}${r.birdieCount > 0 ? `, net gross birdies: ${r.birdieCount}` : ''}, bet multiplier x${r.multiplier})`;
+  } else if (r.tie) outcome = `Push — tied at net ${r.aBest}.`;
   else {
     const winNames = r.winners.map(i => state.players[i]).join(' & ');
     outcome = `<span class="win-text">${winNames} win the hole</span> (net ${Math.min(r.aBest, r.bBest)} beats ${Math.max(r.aBest, r.bBest)}, hammers: ${data.hammers}${r.birdieCount > 0 ? `, gross birdies: ${r.birdieCount}` : ''}, bet multiplier x${r.multiplier})`;
