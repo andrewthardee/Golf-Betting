@@ -1048,6 +1048,10 @@ function renderFullData() {
   document.getElementById('editTrashBig').value = state.bets.trashBig;
   document.getElementById('editDaytonaPointValue').value = state.bets.daytonaPointValue;
 
+  document.querySelector('#playersTabTable tbody').innerHTML = state.players.map((p, i) => `
+    <tr><td>${p}</td><td>${state.handicapIndex[i]}</td><td>${courseHandicap(i)}</td><td>${playingHandicap(i)}</td></tr>
+  `).join('');
+
   renderScorecardInputs();
   renderScorecardSummary();
 

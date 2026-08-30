@@ -19,6 +19,7 @@
   </div>
   <nav id="tabs" class="tabs" style="display:none;">
     <button data-tab="setup" class="tab">Setup</button>
+    <button data-tab="playersTab" class="tab">Players</button>
     <button data-tab="scorecard" class="tab">Scorecard</button>
     <button data-tab="wolf" class="tab">Wolf</button>
     <button data-tab="daytona" class="tab">Daytona</button>
@@ -302,6 +303,17 @@
 
   <div class="card">
     <button id="resetRound" class="danger">Start New Round (clear all data)</button>
+  </div>
+</section>
+
+<!-- PLAYERS (read-only, mid-round) -->
+<section id="playersTab" class="panel">
+  <h2>Players &amp; Handicaps</h2>
+  <div class="card">
+    <table class="input-table" id="playersTabTable">
+      <thead><tr><th>Player</th><th>GHIN Index</th><th>Course Hcp</th><th>Strokes Given</th></tr></thead>
+      <tbody></tbody>
+    </table>
   </div>
 </section>
 
