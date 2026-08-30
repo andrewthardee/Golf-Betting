@@ -801,6 +801,18 @@ function allPairs() {
   }
   return pairs;
 }
+// Round-robin match play is head-to-head, so strokes for each pairing are based on the
+// Course Handicap difference between just those two players (the higher gets a stroke on
+// each of the hardest holes up to that difference), not each player's strokes relative to
+// the whole group's lowest handicap (which is what Wolf/Daytona use).
+function pairNetScores(i, j, hole, scores) {
+  const chI = courseHandicap(i), chJ = courseHandicap(j);
+  const si = activeCourse().holes[hole - 1].si;
+  const strokesFor = diff => Math.floor(diff / 18) + (si <= (diff % 18) ? 1 : 0);
+  const strokesI = chI > chJ ? strokesFor(chI - chJ) : 0;
+  const strokesJ = chJ > chI ? strokesFor(chJ - chI) : 0;
+  return [Number(scores[i]) - strokesI, Number(scores[j]) - strokesJ];
+}
 function computeMatchStatuses() {
   const pairs = allPairs();
   const holes = Object.keys(state.holes).map(Number).filter(holeHasScores).sort((a, b) => a - b);
@@ -808,12 +820,12 @@ function computeMatchStatuses() {
   pairs.forEach(([i, j]) => { status[`${i}-${j}`] = { diff: 0, holesPlayed: 0 }; });
   holes.forEach(h => {
     const data = state.holes[h];
-    const nets = state.players.map((_, idx) => netScore(idx, h, data.scores[idx]));
     pairs.forEach(([i, j]) => {
       const key = `${i}-${j}`;
       status[key].holesPlayed++;
-      if (nets[i] < nets[j]) status[key].diff++;
-      else if (nets[j] < nets[i]) status[key].diff--;
+      const [netI, netJ] = pairNetScores(i, j, h, data.scores);
+      if (netI < netJ) status[key].diff++;
+      else if (netJ < netI) status[key].diff--;
     });
   });
   return status;
@@ -821,11 +833,11 @@ function computeMatchStatuses() {
 function holeMatchResults(hole) {
   const pairs = allPairs();
   const data = state.holes[hole];
-  const nets = state.players.map((_, i) => netScore(i, hole, data.scores[i]));
   return pairs.map(([i, j]) => {
+    const [netI, netJ] = pairNetScores(i, j, hole, data.scores);
     let winner = null;
-    if (nets[i] < nets[j]) winner = i;
-    else if (nets[j] < nets[i]) winner = j;
+    if (netI < netJ) winner = i;
+    else if (netJ < netI) winner = j;
     return { i, j, winner };
   });
 }
