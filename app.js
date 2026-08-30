@@ -508,6 +508,15 @@ document.getElementById('holeSetupContinueBtn').addEventListener('click', () => 
 function prepareTeeShotScreen() {
   const hole = activeHole();
   document.getElementById('teeShotTitle').textContent = `Hole ${hole} — Post Tee Shot${state.editingHole ? ' (Editing)' : ''}`;
+
+  if (!state.dayHoles[hole] || !state.dayHoles[hole].teamOf2) {
+    randomizeDaytonaForHole(hole);
+    saveState();
+  }
+  const day = state.dayHoles[hole];
+  document.getElementById('teeShotDaytonaRef').innerHTML =
+    `${day.teamOf2.map(i => state.players[i]).join(' & ')} (2) vs ${day.teamOf3.map(i => state.players[i]).join(', ')} (3, every 2-man combo played)`;
+
   const wolfSel = document.getElementById('wolfPlayer');
   wolfSel.innerHTML = state.players.map((p, i) => `<option value="${i}">${p}</option>`).join('');
 
@@ -558,9 +567,6 @@ document.getElementById('teeShotContinueBtn').addEventListener('click', () => {
   const mode = document.getElementById('wolfMode').value;
   const partner = mode === 'partner' ? Number(document.getElementById('wolfPartner').value) : null;
   state.pendingWolf = { wolf, mode, partner };
-  if (!state.dayHoles[hole] || !state.dayHoles[hole].teamOf2) {
-    randomizeDaytonaForHole(hole);
-  }
   saveState();
   prepareEnterScoresScreen();
   showScreen('scrEnterScores');
