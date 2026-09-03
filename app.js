@@ -856,14 +856,17 @@ function computeCatsDogs() {
     const lowIdxs = nets.reduce((a, n, i) => (n === minNet ? a.concat(i) : a), []);
     const highIdxs = nets.reduce((a, n, i) => (n === maxNet ? a.concat(i) : a), []);
 
+    const holePayouts = state.players.map(() => 0);
+
     let catWinner = null, catUnits = 0;
     if (lowIdxs.length === 1) {
       catWinner = lowIdxs[0];
       catUnits = carryCat;
       catCounts[catWinner] += 1;
       const amount = catValue * catUnits;
-      state.players.forEach((_, i) => { if (i !== catWinner) payouts[i] -= amount; });
+      state.players.forEach((_, i) => { if (i !== catWinner) { payouts[i] -= amount; holePayouts[i] -= amount; } });
       payouts[catWinner] += amount * (NUM_PLAYERS - 1);
+      holePayouts[catWinner] += amount * (NUM_PLAYERS - 1);
       carryCat = 1;
     } else {
       carryCat += 1;
@@ -875,17 +878,24 @@ function computeCatsDogs() {
       dogUnits = carryDog;
       dogCounts[dogLoser] += 1;
       const amount = dogValue * dogUnits;
-      state.players.forEach((_, i) => { if (i !== dogLoser) payouts[i] += amount; });
+      state.players.forEach((_, i) => { if (i !== dogLoser) { payouts[i] += amount; holePayouts[i] += amount; } });
       payouts[dogLoser] -= amount * (NUM_PLAYERS - 1);
+      holePayouts[dogLoser] -= amount * (NUM_PLAYERS - 1);
       carryDog = 1;
     } else {
       carryDog += 1;
     }
 
-    holeResults.push({ hole: h, nets, catWinner, catUnits, dogLoser, dogUnits });
+    holeResults.push({ hole: h, nets, catWinner, catUnits, dogLoser, dogUnits, payouts: holePayouts });
   });
 
   return { holeResults, catCounts, dogCounts, payouts, pendingCat: carryCat, pendingDog: carryDog };
+}
+
+function catDogUnitsText(units) {
+  if (units <= 1) return 'for 1 bet';
+  const carryOvers = units - 1;
+  return `+ ${carryOvers} carry over${carryOvers > 1 ? 's' : ''} for ${units} bets`;
 }
 
 function formatCatsDogsHoleResult(hole) {
@@ -893,12 +903,23 @@ function formatCatsDogsHoleResult(hole) {
   const r = cd.holeResults.find(x => x.hole === hole);
   if (!r) return '<p class="hint">No score yet.</p>';
   const catText = r.catWinner !== null
-    ? `<span class="win-text">${state.players[r.catWinner]} wins the Cat</span>${r.catUnits > 1 ? ` (carried, worth ${r.catUnits}x)` : ''} — everyone pays ${fmtMoney(state.bets.catValue * r.catUnits)}`
-    : `Tied for low — Cat carries over${cd.pendingCat > 1 ? ` (now worth ${cd.pendingCat}x)` : ''}`;
+    ? `<span class="win-text">${state.players[r.catWinner]} won a Cat</span> ${catDogUnitsText(r.catUnits)} (${fmtMoney(state.bets.catValue * r.catUnits)} from each)`
+    : `Tied for low — Cat carries over${cd.pendingCat > 1 ? ` (now ${cd.pendingCat} bets)` : ''}`;
   const dogText = r.dogLoser !== null
-    ? `<span class="lose-text">${state.players[r.dogLoser]} gets the Dog</span>${r.dogUnits > 1 ? ` (carried, worth ${r.dogUnits}x)` : ''} — pays everyone ${fmtMoney(state.bets.dogValue * r.dogUnits)}`
-    : `Tied for high — Dog carries over${cd.pendingDog > 1 ? ` (now worth ${cd.pendingDog}x)` : ''}`;
+    ? `<span class="lose-text">${state.players[r.dogLoser]} got the Dog</span> ${catDogUnitsText(r.dogUnits)} (pays ${fmtMoney(state.bets.dogValue * r.dogUnits)} to each)`
+    : `Tied for high — Dog carries over${cd.pendingDog > 1 ? ` (now ${cd.pendingDog} bets)` : ''}`;
   return `<div class="result-row">${catText}<br>${dogText}</div>`;
+}
+
+function formatCatsDogsHoleResultFull(r) {
+  const catText = r.catWinner !== null
+    ? `<span class="win-text">${state.players[r.catWinner]} won a Cat</span> ${catDogUnitsText(r.catUnits)}`
+    : `Cat tied for low — carries over`;
+  const dogText = r.dogLoser !== null
+    ? `<span class="lose-text">${state.players[r.dogLoser]} got the Dog</span> ${catDogUnitsText(r.dogUnits)}`
+    : `Dog tied for high — carries over`;
+  const payoutLine = state.players.map((p, i) => `${p} ${fmtMoney(r.payouts[i])}`).join(', ');
+  return `<div class="result-row"><b>Hole ${r.hole}</b>: ${catText}<br>${dogText}<br><span class="hint">${payoutLine}</span></div>`;
 }
 
 function renderCatsDogsSummary(targetId) {
@@ -1255,6 +1276,14 @@ function renderFullData() {
   const daySums = state.players.map(() => 0);
   dayHoles.forEach(h => { computeDaytonaHole(h, state.dayHoles[h]).payouts.forEach((p, i) => daySums[i] += p); });
   document.getElementById('dayTotals').innerHTML = `<table class="totals-table">${state.players.map((p, i) => `<tr><td>${p}</td><td>${fmtMoney(daySums[i])}</td></tr>`).join('')}</table>`;
+
+  const catsDogsFull = computeCatsDogs();
+  document.getElementById('catsDogsResults').innerHTML = catsDogsFull.holeResults.length
+    ? catsDogsFull.holeResults.map(formatCatsDogsHoleResultFull).join('')
+    : '<p class="hint">No holes recorded yet.</p>';
+  document.getElementById('catsDogsTotals').innerHTML = `<table class="totals-table"><thead><tr><th>Player</th><th>Cats</th><th>Dogs</th><th>$</th></tr></thead><tbody>${
+    state.players.map((p, i) => `<tr><td>${p}</td><td>${catsDogsFull.catCounts[i]}</td><td>${catsDogsFull.dogCounts[i]}</td><td>${fmtMoney(catsDogsFull.payouts[i])}</td></tr>`).join('')
+  }</tbody></table>`;
 
   renderMatchplay('mpMatches');
   renderSummary('summaryTable');
