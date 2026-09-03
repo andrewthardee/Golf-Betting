@@ -41,7 +41,7 @@ let state = loadState() || {
   roster: [],
   courses: [makeDefaultCourse()],
   activeCourseId: 'default',
-  bets: { smallStake: 15, bigStake: 10, trashSmall: 5, trashBig: 5, daytonaPointValue: 1 },
+  bets: { smallStake: 15, bigStake: 10, trashSmall: 5, trashBig: 5, daytonaPointValue: 1, catValue: 5, dogValue: 5 },
   holes: {},
   wolfHoles: {},
   dayHoles: {},
@@ -78,6 +78,8 @@ if (!state.bets.bigStake) state.bets.bigStake = 10;
 if (state.bets.trashSmall === undefined) state.bets.trashSmall = 5;
 if (state.bets.trashBig === undefined) state.bets.trashBig = 5;
 if (state.bets.daytonaPointValue === undefined) state.bets.daytonaPointValue = 1;
+if (state.bets.catValue === undefined) state.bets.catValue = 5;
+if (state.bets.dogValue === undefined) state.bets.dogValue = 5;
 if (!state.holes) state.holes = {};
 if (!state.dayHoles) state.dayHoles = {};
 if (!state.roster) {
@@ -444,6 +446,8 @@ document.getElementById('playersContinueBtn').addEventListener('click', () => {
   document.getElementById('trashSmall').value = state.bets.trashSmall;
   document.getElementById('trashBig').value = state.bets.trashBig;
   document.getElementById('daytonaPointValue').value = state.bets.daytonaPointValue;
+  document.getElementById('catValue').value = state.bets.catValue;
+  document.getElementById('dogValue').value = state.bets.dogValue;
   document.getElementById('superWolfEnabled').checked = state.superWolfEnabled;
 });
 document.getElementById('superWolfEnabled').addEventListener('change', e => {
@@ -457,6 +461,8 @@ document.getElementById('bigStake').addEventListener('input', e => { state.bets.
 document.getElementById('trashSmall').addEventListener('input', e => { state.bets.trashSmall = Number(e.target.value) || 0; saveState(); });
 document.getElementById('trashBig').addEventListener('input', e => { state.bets.trashBig = Number(e.target.value) || 0; saveState(); });
 document.getElementById('daytonaPointValue').addEventListener('input', e => { state.bets.daytonaPointValue = Number(e.target.value) || 0; saveState(); });
+document.getElementById('catValue').addEventListener('input', e => { state.bets.catValue = Number(e.target.value) || 0; saveState(); });
+document.getElementById('dogValue').addEventListener('input', e => { state.bets.dogValue = Number(e.target.value) || 0; saveState(); });
 
 document.getElementById('betsBackBtn').addEventListener('click', () => {
   showScreen('scrPlayers');
@@ -829,6 +835,109 @@ function formatDaytonaHoleResult(hole, data) {
   return `<div class="result-row"><b>Hole ${hole}</b>: ${teamAName} (2) vs ${teamBName} (3, every 2-man combo played)<br>${gamesHtml}<br><span class="hint">${payoutLine}</span></div>`;
 }
 
+/* ---------- Cats & Dogs (net skins) math ---------- */
+// A Cat goes to the lone-lowest net score on a hole; a Dog is charged to the lone-highest.
+// A tie for low (or high) carries that Cat (or Dog) over, stacking its value onto the next hole.
+function computeCatsDogs() {
+  const holes = Object.keys(state.holes).map(Number).filter(holeHasScores).sort((a, b) => a - b);
+  const catValue = state.bets.catValue || 0;
+  const dogValue = state.bets.dogValue || 0;
+  const catCounts = state.players.map(() => 0);
+  const dogCounts = state.players.map(() => 0);
+  const payouts = state.players.map(() => 0);
+  const holeResults = [];
+  let carryCat = 1, carryDog = 1;
+
+  holes.forEach(h => {
+    const data = state.holes[h];
+    const nets = state.players.map((_, i) => netScore(i, h, data.scores[i]));
+    const minNet = Math.min(...nets);
+    const maxNet = Math.max(...nets);
+    const lowIdxs = nets.reduce((a, n, i) => (n === minNet ? a.concat(i) : a), []);
+    const highIdxs = nets.reduce((a, n, i) => (n === maxNet ? a.concat(i) : a), []);
+
+    let catWinner = null, catUnits = 0;
+    if (lowIdxs.length === 1) {
+      catWinner = lowIdxs[0];
+      catUnits = carryCat;
+      catCounts[catWinner] += 1;
+      const amount = catValue * catUnits;
+      state.players.forEach((_, i) => { if (i !== catWinner) payouts[i] -= amount; });
+      payouts[catWinner] += amount * (NUM_PLAYERS - 1);
+      carryCat = 1;
+    } else {
+      carryCat += 1;
+    }
+
+    let dogLoser = null, dogUnits = 0;
+    if (highIdxs.length === 1) {
+      dogLoser = highIdxs[0];
+      dogUnits = carryDog;
+      dogCounts[dogLoser] += 1;
+      const amount = dogValue * dogUnits;
+      state.players.forEach((_, i) => { if (i !== dogLoser) payouts[i] += amount; });
+      payouts[dogLoser] -= amount * (NUM_PLAYERS - 1);
+      carryDog = 1;
+    } else {
+      carryDog += 1;
+    }
+
+    holeResults.push({ hole: h, nets, catWinner, catUnits, dogLoser, dogUnits });
+  });
+
+  return { holeResults, catCounts, dogCounts, payouts, pendingCat: carryCat, pendingDog: carryDog };
+}
+
+function formatCatsDogsHoleResult(hole) {
+  const cd = computeCatsDogs();
+  const r = cd.holeResults.find(x => x.hole === hole);
+  if (!r) return '<p class="hint">No score yet.</p>';
+  const catText = r.catWinner !== null
+    ? `<span class="win-text">${state.players[r.catWinner]} wins the Cat</span>${r.catUnits > 1 ? ` (carried, worth ${r.catUnits}x)` : ''} — everyone pays ${fmtMoney(state.bets.catValue * r.catUnits)}`
+    : `Tied for low — Cat carries over${cd.pendingCat > 1 ? ` (now worth ${cd.pendingCat}x)` : ''}`;
+  const dogText = r.dogLoser !== null
+    ? `<span class="lose-text">${state.players[r.dogLoser]} gets the Dog</span>${r.dogUnits > 1 ? ` (carried, worth ${r.dogUnits}x)` : ''} — pays everyone ${fmtMoney(state.bets.dogValue * r.dogUnits)}`
+    : `Tied for high — Dog carries over${cd.pendingDog > 1 ? ` (now worth ${cd.pendingDog}x)` : ''}`;
+  return `<div class="result-row">${catText}<br>${dogText}</div>`;
+}
+
+function renderCatsDogsSummary(targetId) {
+  const cd = computeCatsDogs();
+  const rows = state.players.map((p, i) => `
+    <tr><td>${p}</td><td>${cd.catCounts[i]}</td><td>${cd.dogCounts[i]}</td><td>${fmtMoney(cd.payouts[i])}</td></tr>
+  `).join('');
+  document.getElementById(targetId).innerHTML = `
+    <table class="totals-table">
+      <thead><tr><th>Player</th><th>Cats</th><th>Dogs</th><th>$</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// Greedy min-transaction settle-up: repeatedly match the biggest creditor with the biggest
+// debtor. Not guaranteed globally optimal in every edge case, but standard for this size group.
+function computeSettleUp(balances) {
+  const creditors = [], debtors = [];
+  state.players.forEach((_, i) => {
+    const v = Math.round(balances[i] * 100) / 100;
+    if (v > 0.5) creditors.push({ i, amt: v });
+    else if (v < -0.5) debtors.push({ i, amt: -v });
+  });
+  creditors.sort((a, b) => b.amt - a.amt);
+  debtors.sort((a, b) => b.amt - a.amt);
+  const transactions = [];
+  let ci = 0, di = 0;
+  while (ci < creditors.length && di < debtors.length) {
+    const c = creditors[ci], d = debtors[di];
+    const amt = Math.min(c.amt, d.amt);
+    if (amt > 0.5) transactions.push({ from: d.i, to: c.i, amount: amt });
+    c.amt -= amt; d.amt -= amt;
+    if (c.amt <= 0.5) ci++;
+    if (d.amt <= 0.5) di++;
+  }
+  return transactions;
+}
+
 /* ---------- Match Play math ---------- */
 function allPairs() {
   const pairs = [];
@@ -913,23 +1022,40 @@ function renderSummary(targetId) {
     r.payouts.forEach((p, i) => daySums[i] += p);
   });
 
-  const totalSums = state.players.map((_, i) => wolfSums[i] + daySums[i]);
+  const catsDogs = computeCatsDogs();
+  const cdSums = catsDogs.payouts;
+
+  const totalSums = state.players.map((_, i) => wolfSums[i] + daySums[i] + cdSums[i]);
 
   const rows = state.players.map((p, i) => `
     <tr>
       <td>${p}</td>
       <td>${fmtMoney(wolfSums[i])}</td>
       <td>${fmtMoney(daySums[i])}</td>
+      <td>${fmtMoney(cdSums[i])}</td>
       <td><b>${fmtMoney(totalSums[i])}</b></td>
     </tr>
   `).join('');
 
   document.getElementById(targetId).innerHTML = `
     <table class="totals-table">
-      <thead><tr><th>Player</th><th>Wolf</th><th>Daytona</th><th>Total</th></tr></thead>
+      <thead><tr><th>Player</th><th>Wolf</th><th>Daytona</th><th>Cats/Dogs</th><th>Total</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
+
+  const settleBox = document.getElementById('settleUpBox');
+  if (settleBox) {
+    const roundComplete = state.holeIndex >= 17;
+    if (roundComplete) {
+      const transactions = computeSettleUp(totalSums);
+      settleBox.innerHTML = transactions.length
+        ? `<h4>Settle Up</h4>` + transactions.map(t => `<div>${state.players[t.from]} pays ${state.players[t.to]} $${Math.round(t.amount)}</div>`).join('')
+        : `<h4>Settle Up</h4><p class="hint">Everyone's even — nothing to settle.</p>`;
+    } else {
+      settleBox.innerHTML = '';
+    }
+  }
 }
 
 /* ---------- Super Wolf (last 3 holes) ---------- */
@@ -944,7 +1070,8 @@ function computeMoneyTotals() {
     const r = computeDaytonaHole(Number(h), state.dayHoles[h]);
     r.payouts.forEach((p, i) => daySums[i] += p);
   });
-  return state.players.map((_, i) => wolfSums[i] + daySums[i]);
+  const cdSums = computeCatsDogs().payouts;
+  return state.players.map((_, i) => wolfSums[i] + daySums[i] + cdSums[i]);
 }
 
 let pendingSuperWolfOrder = null;
@@ -983,6 +1110,7 @@ function prepareHoleSummary(hole) {
   document.getElementById('holeSummaryTitle').textContent = `Hole ${hole} Summary`;
   document.getElementById('holeSummaryWolf').innerHTML = formatWolfHoleResult(hole, state.wolfHoles[hole]);
   document.getElementById('holeSummaryDaytona').innerHTML = formatDaytonaHoleResult(hole, state.dayHoles[hole]);
+  document.getElementById('holeSummaryCatsDogs').innerHTML = formatCatsDogsHoleResult(hole);
 
   const results = holeMatchResults(hole);
   document.getElementById('holeSummaryMatches').innerHTML = results.map(r => {
@@ -1009,6 +1137,7 @@ document.getElementById('editHoleBtn').addEventListener('click', () => {
 
 function prepareStandings() {
   renderSummary('standingsSummary');
+  renderCatsDogsSummary('standingsCatsDogs');
   renderMatchplay('standingsMatches');
   renderScoreTotals('standingsScores');
   const roundComplete = state.holeIndex >= 17;
